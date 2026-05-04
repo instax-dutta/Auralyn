@@ -1,0 +1,31 @@
+server:
+  port: 2333
+  address: "0.0.0.0"
+
+lavalink:
+  server:
+    password: "youshallnotpass"
+    sources:
+      youtube: true
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      http: true
+      local: true
+    autoPlay: true
+    # Buffer settings for stability
+    bufferDurationMs: 400
+    trackStuckThresholdMs: 10000
+
+plugins:
+  # LavaSrc plugins for YouTube/Spotify/SoundCloud
+  - name: lavasrc
+    repository: "https://maven.lavalink.dev/snapshots/dev/lavaSrc"
+    version: "v3.0.0-SNAPSHOT"
+
+logging:
+  file:
+    path: "./logs"
+  level:
+    root: "INFO"
+    lavalink: "DEBUG"

@@ -1,0 +1,24 @@
+{
+  "name": "auralyn",
+  "version": "1.0.0",
+  "description": "A production-ready Discord music bot with Lavalink",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "docker:build": "docker build -t auralyn .",
+    "docker:run": "docker run -d --name auralyn -p 2333:2333 --env-file .env auralyn"
+  },
+  "dependencies": {
+    "@discord-player/extractor": "^7.2.0",
+    "@snazzah/davey": "^0.1.11",
+    "discord-player": "^7.2.0",
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.0",
+    "shoukaku": "^1.5.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

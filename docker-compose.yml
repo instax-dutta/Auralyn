@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  auralyn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auralyn
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - CLIENT_ID=${CLIENT_ID}
+      - GUILD_ID=${GUILD_ID}
+      - LAVALINK_HOST=localhost
+      - LAVALINK_PORT=2333
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
+      - LAVALINK_SECURE=false
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./lavalink/logs:/app/lavalink/logs
+    ports:
+      - "2333:2333"
+      - "8080:8080"
+    networks:
+      - auralyn-network
+
+networks:
+  auralyn-network:
+    driver: bridge

@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment files (use .env.docker for Docker)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.bak
+*.tmp
+temp/
+data/

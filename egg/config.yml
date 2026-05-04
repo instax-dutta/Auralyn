@@ -1,0 +1,23 @@
+name: Auralyn Music Bot
+description: Discord music bot with integrated Lavalink server
+author: YourName
+cpu: 1000
+memory: 2048
+disk: 10240
+image: ghcr.io/yourrepo/auralyn:latest
+startup: "node src/index.js"
+command: ""
+environment:
+  DISCORD_TOKEN: ""
+  CLIENT_ID: ""
+  GUILD_ID: ""
+  LAVALINK_HOST: localhost
+  LAVALINK_PORT: "2333"
+  LAVALINK_PASSWORD: youshallnotpass
+  LAVALINK_SECURE: "false"
+  NODE_ENV: production
+mounts:
+  /app/logs: logs
+  /app/lavalink/logs: lavalink/logs
+  /app/.env: .env
+stop: pkill -f node

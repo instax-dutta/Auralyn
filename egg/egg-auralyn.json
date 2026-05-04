@@ -1,0 +1,94 @@
+{
+  "name": "Auralyn",
+  "author": "YourName",
+  "description": "A Discord music bot with Lavalink built-in",
+  "features": {
+    "docker": {
+      "image": "ghcr.io/yourrepo/auralyn:latest",
+      "app": {
+        "startup": {
+          "done": "Starting Auralyn bot",
+          "container": {
+            "startup": {
+              "general": [
+                {
+                  "action": "wait",
+                  "timeout": 5,
+                  "output": "Starting Auralyn bot"
+                },
+                {
+                  "action": "stop"
+                }
+              ]
+            }
+          }
+        },
+        "stop": "pkill -f node"
+      },
+      "configs": {
+        "files": {
+          "app/.env": "env"
+        },
+        "location": "app"
+      }
+    },
+    "process": {
+      "name": "Auralyn",
+      "mappings": {
+        "startup": {
+          "done": {
+            "match": "Auralyn is ready"
+          }
+        }
+      },
+      "default": {
+        "run": "node src/index.js"
+      }
+    },
+    "logs": {
+      "custom": {
+        "location": "logs"
+      }
+    },
+    "mounts": {
+      "configs": [
+        {
+          "source": "lavalink/logs",
+          "target": "/app/lavalink/logs"
+        },
+        {
+          "source": "logs",
+          "target": "/app/logs"
+        }
+      ]
+    }
+  },
+  "variables": [
+    {
+      "name": "DISCORD_TOKEN",
+      "description": "Your Discord bot token",
+      "envVariable": "DISCORD_TOKEN",
+      "defaultValue": "",
+      "userViewable": false
+    },
+    {
+      "name": "CLIENT_ID",
+      "description": "Your Discord client ID",
+      "envVariable": "CLIENT_ID",
+      "defaultValue": ""
+    },
+    {
+      "name": "GUILD_ID",
+      "description": "Your Discord server ID (for guild commands)",
+      "envVariable": "GUILD_ID",
+      "defaultValue": ""
+    },
+    {
+      "name": "LAVALINK_PASSWORD",
+      "description": "Lavalink server password",
+      "envVariable": "LAVALINK_PASSWORD",
+      "defaultValue": "youshallnotpass"
+    }
+  ],
+  "thumbnail": "https://example.com/auralyn.png"
+}
