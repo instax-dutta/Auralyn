@@ -1,54 +1,59 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { player } from '../index.js';
-import { createEmbed, AuralynColors } from '../utils/embeds.js';
+import { AuralynColors } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('queue')
-    .setDescription('Show the current queue'),
-  async execute(interaction) {
-    const queue = player.nodes.get(interaction.guildId);
+    .setDescription('View the current music queue'),
 
-    if (!queue || queue.tracks.length === 0) {
-      return interaction.reply({ 
-        embeds: [createEmbed({
-          title: '📋 Empty Queue',
-          description: 'There are no tracks in the queue.',
-          color: AuralynColors.warning,
-        })]
+  async execute(interaction, client, shoukaku) {
+    await interaction.deferReply();
+
+    const playerState = client.musicPlayer.getPlayerState(interaction.guildId);
+    const queue = playerState.queue;
+    const currentTrack = playerState.currentTrack;
+
+    if (!currentTrack && queue.length === 0) {
+      return interaction.editReply('The queue is empty!');
+    }
+
+    // We'll create an embed for the queue
+    const embed = new EmbedBuilder()
+      .setColor(AuralynColors.primary)
+      .setTitle('🎵 Music Queue');
+
+    if (currentTrack) {
+      embed.addFields({
+        name: '▶️ Now Playing',
+        value: `[${currentTrack.title}](${currentTrack.uri || '#'}) \`${currentTrack.duration || 'Unknown'}\``,
+        inline: false,
       });
     }
 
-    const tracks = queue.tracks.slice(0, 10).map((track, i) => {
-      return `\`${i + 1}.\` **[${track.title}](${track.url})** - \`${track.duration}\``;
-    });
+    if (queue.length > 0) {
+      const tracksInQueue = queue.slice(0, 10).map((track, index) => 
+        '`' + (index + 1) + '.` [' + track.title + '](' + (track.uri || '#') + ') `' + (track.duration || 'Unknown') + '`'
+      ).join('\n');
 
-    const currentTrack = queue.currentTrack;
-    const totalDuration = queue.tracks.reduce((acc, t) => acc + (t.durationMs || 0), 0);
-    const formattedDuration = Math.floor(totalDuration / 60000) + ' min';
+      embed.addFields({
+        name: '📋 Up Next',
+        value: tracksInQueue || 'Queue is empty',
+        inline: false,
+      });
 
-    const embed = new EmbedBuilder()
-      .setTitle('📋 Music Queue')
-      .setColor(AuralynColors.primary)
-      .setTimestamp()
-      .addFields(
-        { 
-          name: '▶️ Now Playing', 
-          value: currentTrack ? `**[${currentTrack.title}](${currentTrack.url})** - \`${currentTrack.duration}\`` : 'Nothing playing',
-          inline: false 
-        },
-        { 
-          name: '📝 Up Next', 
-          value: tracks.join('\n') || 'No more tracks',
-          inline: false 
-        },
-        { 
-          name: '📊 Queue Stats', 
-          value: `**${queue.tracks.length}** tracks • **${formattedDuration}** total`,
-          inline: false 
-        }
-      );
+      if (queue.length > 10) {
+        embed.setFooter({ text: `And ${queue.length - 10} more tracks...` });
+      }
+    } else {
+      embed.addFields({
+        name: '📋 Up Next',
+        value: 'Queue is empty',
+        inline: false,
+      });
+    }
 
-    await interaction.reply({ embeds: [embed] });
+    embed.setTimestamp();
+
+    return interaction.editReply({ embeds: [embed] });
   },
 };

@@ -1,59 +1,48 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { player } from '../index.js';
-import { AuralynColors } from '../utils/embeds.js';
+import { SlashCommandBuilder } from 'discord.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('loop')
-    .setDescription('Toggle loop mode')
+    .setDescription('Toggle loop mode for the queue')
     .addStringOption(option =>
       option.setName('mode')
-        .setDescription('Loop mode')
+        .setDescription('Loop mode to set')
         .setRequired(true)
         .addChoices(
+          { name: 'Off', value: 'off' },
           { name: 'Track', value: 'track' },
-          { name: 'Queue', value: 'queue' },
-          { name: 'Off', value: 'off' }
-        )
-    ),
-  async execute(interaction) {
-    const queue = player.nodes.get(interaction.guildId);
+          { name: 'Queue', value: 'queue' }
+        )),
 
-    if (!queue) {
-      return interaction.reply({ 
-        embeds: [new EmbedBuilder()
-          .setTitle('🔁 Loop')
-          .setDescription('No music is currently playing.')
-          .setColor(AuralynColors.warning)
-          .setTimestamp()
-        ]
-      });
+  async execute(interaction, client, shoukaku) {
+    await interaction.deferReply();
+
+    if (!interaction.member.voice.channel) {
+      return interaction.editReply('You need to be in a voice channel to use this command!');
     }
 
     const mode = interaction.options.getString('mode');
-    let title, description;
-
-    if (mode === 'track') {
-      queue.setLoop('track');
-      title = '🔂 Track Loop Enabled';
-      description = 'Current track will loop continuously.';
-    } else if (mode === 'queue') {
-      queue.setLoop('queue');
-      title = '🔁 Queue Loop Enabled';
-      description = 'The entire queue will loop continuously.';
-    } else {
-      queue.setLoop('off');
-      title = '➡️ Loop Disabled';
-      description = 'Loop mode has been turned off.';
+    let loopMode;
+    switch (mode) {
+      case 'off':
+        loopMode = 0;
+        break;
+      case 'track':
+        loopMode = 1;
+        break;
+      case 'queue':
+        loopMode = 2;
+        break;
+      default:
+        return interaction.editReply('Invalid loop mode!');
     }
 
-    await interaction.reply({ 
-      embeds: [new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(description)
-        .setColor(AuralynColors.primary)
-        .setTimestamp()
-      ]
-    });
+    try {
+      client.musicPlayer.setLoopMode(interaction.guildId, loopMode);
+      return interaction.editReply(`Loop mode set to: ${mode}`);
+    } catch (error) {
+      console.error('Error in loop command:', error);
+      return interaction.editReply('There was an error while trying to set the loop mode!');
+    }
   },
 };

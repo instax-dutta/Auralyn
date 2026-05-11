@@ -1,25 +1,23 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { player } from '../index.js';
-import { successEmbed, errorEmbed, musicEmbed } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('pause')
-    .setDescription('Pause the current song'),
-  async execute(interaction) {
-    const queue = player.nodes.get(interaction.guildId);
+    .setDescription('Pause the current track'),
 
-    if (!queue || !queue.playing) {
-      return interaction.reply({ 
-        embeds: [errorEmbed('No music is currently playing.', '⏸️ Nothing Playing')] 
-      });
+  async execute(interaction, client, shoukaku) {
+    await interaction.deferReply();
+
+    if (!interaction.member.voice.channel) {
+      return interaction.editReply('You need to be in a voice channel to use this command!');
     }
 
-    queue.pause();
-    
-    const currentTrack = queue.currentTrack;
-    await interaction.reply({ 
-      embeds: [musicEmbed(`Paused: **[${currentTrack?.title}](${currentTrack?.url})**`, '⏸️ Music Paused')]
-    });
+    try {
+      client.musicPlayer.pause(interaction.guildId);
+      return interaction.editReply('Paused the current track!');
+    } catch (error) {
+      console.error('Error in pause command:', error);
+      return interaction.editReply('There was an error while trying to pause the track!');
+    }
   },
 };

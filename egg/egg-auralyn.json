@@ -1,7 +1,7 @@
 {
   "name": "Auralyn",
   "author": "YourName",
-  "description": "A Discord music bot with Lavalink built-in",
+  "description": "A Discord music bot with Lavalink v4 built-in",
   "features": {
     "docker": {
       "image": "ghcr.io/yourrepo/auralyn:latest",
@@ -23,7 +23,7 @@
             }
           }
         },
-        "stop": "pkill -f node"
+        "stop": "kill $(cat /app/lavalink.pid) && kill $(cat /app/bot.pid)"
       },
       "configs": {
         "files": {
@@ -37,12 +37,12 @@
       "mappings": {
         "startup": {
           "done": {
-            "match": "Auralyn is ready"
+            "match": "Auralyn bot started successfully"
           }
         }
       },
       "default": {
-        "run": "node src/index.js"
+        "run": "/app/scripts/start.sh"
       }
     },
     "logs": {
@@ -88,6 +88,30 @@
       "description": "Lavalink server password",
       "envVariable": "LAVALINK_PASSWORD",
       "defaultValue": "youshallnotpass"
+    },
+    {
+      "name": "LAVALINK_MEMORY",
+      "description": "Memory allocated to Lavalink (e.g., 1G, 2G)",
+      "envVariable": "LAVALINK_MEMORY",
+      "defaultValue": "1G"
+    },
+    {
+      "name": "LAVALINK_STARTUP_TIMEOUT",
+      "description": "Timeout in seconds for Lavalink to start",
+      "envVariable": "LAVALINK_STARTUP_TIMEOUT",
+      "defaultValue": "60"
+    },
+    {
+      "name": "SPOTIFY_CLIENT_ID",
+      "description": "Spotify client ID for LavaSrc plugin",
+      "envVariable": "SPOTIFY_CLIENT_ID",
+      "defaultValue": ""
+    },
+    {
+      "name": "SPOTIFY_CLIENT_SECRET",
+      "description": "Spotify client secret for LavaSrc plugin",
+      "envVariable": "SPOTIFY_CLIENT_SECRET",
+      "defaultValue": ""
     }
   ],
   "thumbnail": "https://example.com/auralyn.png"

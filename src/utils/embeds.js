@@ -85,43 +85,5 @@ export function musicEmbed(description, title = '🎵 Auralyn') {
   });
 }
 
-export function nowPlayingEmbed(track, requestedBy, client) {
-  return createEmbed({
-    title: '🎶 Now Playing',
-    description: `**[${track.title}](${track.url})**`,
-    color: AuralynColors.success,
-    fields: [
-      { name: '👤 Artist', value: track.author || 'Unknown', inline: true },
-      { name: '⏱️ Duration', value: track.duration || 'Unknown', inline: true },
-      { name: '🎧 Requested by', value: requestedBy?.username || 'Unknown', inline: true },
-    ],
-    thumbnail: track.thumbnail || null,
-    timestamp: true,
-  });
-}
-
-export function queueEmbed(tracks, currentTrack, totalDuration) {
-  const trackList = tracks.slice(0, 10).map((track, i) => 
-    `\`${i + 1}.\` **[${track.title}](${track.url})** - \`${track.duration}\``
-  ).join('\n');
-
-  return createEmbed({
-    title: '🎵 Music Queue',
-    color: AuralynColors.primary,
-    fields: [
-      {
-        name: '▶️ Now Playing',
-        value: currentTrack ? `**[${currentTrack.title}](${currentTrack.url})**` : 'Nothing playing',
-      },
-      {
-        name: '📋 Up Next',
-        value: trackList || 'Queue is empty',
-      },
-      {
-        name: '📊 Queue Stats',
-        value: `**${tracks.length}** tracks • Total: ${totalDuration}`,
-      },
-    ],
-    timestamp: true,
-  });
-}
+// Note: The nowPlayingEmbed and queueEmbed functions are not included here as they are specific and we are building them in the commands.
+// However, if we want to reuse, we can add them. For now, we leave them out.

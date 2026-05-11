@@ -1,43 +1,23 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { player } from '../index.js';
-import { successEmbed, errorEmbed, musicEmbed } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('skip')
-    .setDescription('Skip the current song')
-    .addIntegerOption(option =>
-      option.setName('position')
-        .setDescription('Position in queue to skip to (1 = next song)')
-        .setRequired(false)
-    ),
-  async execute(interaction) {
-    const queue = player.nodes.get(interaction.guildId);
+    .setDescription('Skip the current track'),
 
-    if (!queue || !queue.playing) {
-      return interaction.reply({ 
-        embeds: [errorEmbed('No music is currently playing.', '⏭️ Nothing Playing')] 
-      });
+  async execute(interaction, client, shoukaku) {
+    await interaction.deferReply();
+
+    if (!interaction.member.voice.channel) {
+      return interaction.editReply('You need to be in a voice channel to use this command!');
     }
 
-    const position = interaction.options.getInteger('position');
-
-    if (position && position > 1 && position <= queue.tracks.length) {
-      const tracksToRemove = position - 2;
-      for (let i = 0; i <= tracksToRemove; i++) {
-        queue.tracks.shift();
-      }
-      await queue.skip();
-      return interaction.reply({ 
-        embeds: [musicEmbed(`Skipped to position **${position}** in queue.`, '⏭️ Skipped')]
-      });
+    try {
+      client.musicPlayer.skip(interaction.guildId);
+      return interaction.editReply('Skipped the current track!');
+    } catch (error) {
+      console.error('Error in skip command:', error);
+      return interaction.editReply('There was an error while trying to skip the track!');
     }
-
-    const currentTitle = queue.currentTrack?.title || 'Unknown';
-    await queue.skip();
-    
-    await interaction.reply({ 
-      embeds: [musicEmbed(`Skipped: **${currentTitle}**`, '⏭️ Track Skipped')]
-    });
   },
 };

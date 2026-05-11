@@ -1,45 +1,31 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { player } from '../index.js';
-import { AuralynColors } from '../utils/embeds.js';
+import { SlashCommandBuilder } from 'discord.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('volume')
-    .setDescription('Set the volume (0-100)')
+    .setDescription('Set the player volume (1-100)')
     .addIntegerOption(option =>
-      option.setName('level')
-        .setDescription('Volume level')
+      option.setName('volume')
+        .setDescription('The volume percentage')
         .setRequired(true)
-        .setMinValue(0)
-        .setMaxValue(100)
-    ),
-  async execute(interaction) {
-    const queue = player.nodes.get(interaction.guildId);
+        .setMinValue(1)
+        .setMaxValue(100)),
 
-    if (!queue) {
-      return interaction.reply({ 
-        embeds: [new EmbedBuilder()
-          .setTitle('🔊 Volume')
-          .setDescription('No music is currently playing.')
-          .setColor(AuralynColors.warning)
-          .setTimestamp()
-        ]
-      });
+  async execute(interaction, client, shoukaku) {
+    await interaction.deferReply();
+
+    if (!interaction.member.voice.channel) {
+      return interaction.editReply('You need to be in a voice channel to use this command!');
     }
 
-    const volume = interaction.options.getInteger('level');
-    queue.node.setVolume(volume);
+    const volume = interaction.options.getInteger('volume');
 
-    const bar = '█'.repeat(Math.floor(volume / 10)) + '░'.repeat(10 - Math.floor(volume / 10));
-    
-    await interaction.reply({ 
-      embeds: [new EmbedBuilder()
-        .setTitle('🔊 Volume Changed')
-        .setDescription(`Volume set to **${volume}%**`)
-        .addFields({ name: '🔊 Volume Bar', value: `\`${bar}\` ${volume}%` })
-        .setColor(AuralynColors.success)
-        .setTimestamp()
-      ]
-    });
+    try {
+      client.musicPlayer.setVolume(interaction.guildId, volume);
+      return interaction.editReply(`Set the volume to ${volume}%`);
+    } catch (error) {
+      console.error('Error in volume command:', error);
+      return interaction.editReply('There was an error while trying to set the volume!');
+    }
   },
 };

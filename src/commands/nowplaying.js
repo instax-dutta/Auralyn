@@ -1,39 +1,33 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { player } from '../index.js';
-import { AuralynColors } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('nowplaying')
-    .setDescription('Show the currently playing song'),
-  async execute(interaction) {
-    const queue = player.nodes.get(interaction.guildId);
-    const track = queue?.currentTrack;
+    .setDescription('Show the currently playing track'),
 
-    if (!track) {
-      return interaction.reply({ 
-        embeds: [new EmbedBuilder()
-          .setTitle('🎶 Nothing Playing')
-          .setDescription('There is no track currently playing.')
-          .setColor(AuralynColors.warning)
-          .setTimestamp()
-        ]
-      });
+  async execute(interaction, client, shoukaku) {
+    await interaction.deferReply();
+
+    const playerState = client.musicPlayer.getPlayerState(interaction.guildId);
+    const currentTrack = playerState.currentTrack;
+
+    if (!currentTrack) {
+      return interaction.editReply('Nothing is currently playing!');
     }
 
     const embed = new EmbedBuilder()
+      .setColor(0x6B4EFF) // AuralynColors.primary
       .setTitle('🎶 Now Playing')
-      .setColor(AuralynColors.success)
-      .setDescription(`**[${track.title}](${track.url})**`)
+      .setDescription(`[${currentTrack.title}](${currentTrack.uri || '#'})`)
       .addFields(
-        { name: '👤 Artist', value: track.author || 'Unknown', inline: true },
-        { name: '⏱️ Duration', value: track.duration || 'Unknown', inline: true },
-        { name: '🎧 Requested by', value: queue?.metadata?.requestedBy?.username || 'Unknown', inline: true },
+        { name: '👤 Author', value: currentTrack.author || 'Unknown', inline: true },
+        { name: '⏱️ Duration', value: currentTrack.duration || 'Unknown', inline: true },
+        { name: '🔊 Volume', value: `${playerState.volume}%`, inline: true },
+        { name: '🔁 Loop', value: ['Off', 'Track', 'Queue'][playerState.loopMode], inline: true }
       )
-      .setThumbnail(track.thumbnail)
-      .setURL(track.url)
+      .setThumbnail(currentTrack.thumbnail)
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    return interaction.editReply({ embeds: [embed] });
   },
 };

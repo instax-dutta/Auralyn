@@ -1,31 +1,37 @@
 server:
+  address: "127.0.0.1"
   port: 2333
-  address: "0.0.0.0"
 
 lavalink:
   server:
-    password: "youshallnotpass"
+    password: "${LAVALINK_PASSWORD:youshallnotpass}"
     sources:
       youtube: true
-      bandcamp: true
       soundcloud: true
       twitch: true
+      bandcamp: true
       http: true
       local: true
-    autoPlay: true
-    # Buffer settings for stability
+    plugins:
+      - lapix: true
     bufferDurationMs: 400
-    trackStuckThresholdMs: 10000
+    frameBufferDurationMs: 5000
+    gcWarnings: true
+    playlistFetchLimit: 10
+    playlistSearchLimit: 10
+    playlistSearchRelevanceFilterLimit: 100
 
-plugins:
-  # LavaSrc plugins for YouTube/Spotify/SoundCloud
-  - name: lavasrc
-    repository: "https://maven.lavalink.dev/snapshots/dev/lavaSrc"
-    version: "v3.0.0-SNAPSHOT"
+  plugins:
+    - name: youtube-source
+      class: dev.lavalink.youtube.YoutubeSourceManager
+      enabled: true
+    - name: lavarsc
+      class: dev.lavalink.LavaSrc.LavaSrcManager
+      enabled: true
+      spotify:
+        client-id: "${SPOTIFY_CLIENT_ID:}"
+        client-secret: "${SPOTIFY_CLIENT_SECRET:}"
 
-logging:
-  file:
-    path: "./logs"
-  level:
-    root: "INFO"
-    lavalink: "DEBUG"
+  tracking:
+    client: lavalink4j
+    interval: 10

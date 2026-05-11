@@ -2,25 +2,22 @@ import { Events } from 'discord.js';
 
 export default {
   name: Events.InteractionCreate,
-  async execute(interaction) {
+  async execute(interaction, client, shoukaku) {
     if (!interaction.isChatInputCommand()) return;
 
-    const client = interaction.client;
     const command = client.commands.get(interaction.commandName);
-
     if (!command) {
-      console.error(`No command matching ${interaction.commandName} found.`);
+      console.error(`No command matching ${interaction.commandName}`);
       return;
     }
 
     try {
-      await command.execute(interaction);
+      await command.execute(interaction, client, shoukaku);
     } catch (error) {
       console.error(error);
-
       const reply = {
         content: 'There was an error executing this command!',
-        ephemeral: true,
+        ephemeral: true
       };
 
       if (interaction.replied || interaction.deferred) {
