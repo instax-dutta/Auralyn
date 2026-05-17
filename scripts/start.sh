@@ -1,68 +1,102 @@
 #!/bin/sh
-set -e
+set -eu
 
-echo "=========================================="
-echo "  Starting Auralyn Music Bot"
-echo "=========================================="
+APP_DIR="${APP_DIR:-/app}"
+LAVALINK_DIR="${LAVALINK_DIR:-$APP_DIR/lavalink}"
+LAVALINK_PORT="${LAVALINK_PORT:-2333}"
+LAVALINK_HOST="${LAVALINK_HOST:-127.0.0.1}"
+LAVALINK_MEMORY="${LAVALINK_MEMORY:-1G}"
+LAVALINK_STARTUP_TIMEOUT="${LAVALINK_STARTUP_TIMEOUT:-60}"
+BOT_ENTRYPOINT="${BOT_ENTRYPOINT:-$APP_DIR/src/index.js}"
 
-# Function to handle cleanup on exit
-cleanup() {
-    echo "Shutting down..."
-    # Kill Lavalink first (graceful drain)
-    if [ -n "$LAVALINK_PID" ]; then
-        kill $LAVALINK_PID 2>/dev/null || true
-        # Wait a bit for Lavalink to shut down
-        sleep 2
+require_env() {
+    name="$1"
+    eval "value=\${$name:-}"
+    if [ -z "$value" ]; then
+        echo "ERROR: $name is required." >&2
+        exit 64
     fi
-    # Then kill the bot
-    if [ -n "$BOT_PID" ]; then
-        kill $BOT_PID 2>/dev/null || true
-    fi
-    exit 0
 }
-trap cleanup SIGTERM SIGINT
 
-# Start Lavalink in background
-echo "[1/3] Starting Lavalink..."
-cd /app/lavalink
-java -Xmx${LAVALINK_MEMORY:-1G} -jar Lavalink.jar > /app/lavalink.log 2>&1 &
+cleanup() {
+    echo "Stopping Auralyn..."
+    if [ -n "${BOT_PID:-}" ] && kill -0 "$BOT_PID" 2>/dev/null; then
+        kill "$BOT_PID" 2>/dev/null || true
+    fi
+    if [ -n "${LAVALINK_PID:-}" ] && kill -0 "$LAVALINK_PID" 2>/dev/null; then
+        kill "$LAVALINK_PID" 2>/dev/null || true
+    fi
+    wait ${BOT_PID:-} 2>/dev/null || true
+    wait ${LAVALINK_PID:-} 2>/dev/null || true
+}
+
+trap 'cleanup; exit 0' INT TERM
+
+require_env DISCORD_TOKEN
+require_env CLIENT_ID
+require_env LAVALINK_PASSWORD
+
+if [ ! -f "$LAVALINK_DIR/Lavalink.jar" ]; then
+    echo "ERROR: Lavalink.jar was not found at $LAVALINK_DIR/Lavalink.jar." >&2
+    exit 66
+fi
+
+if [ ! -f "$LAVALINK_DIR/application.yml" ]; then
+    echo "ERROR: Lavalink application.yml was not found at $LAVALINK_DIR/application.yml." >&2
+    exit 66
+fi
+
+echo "=========================================="
+echo "  Starting Auralyn"
+echo "=========================================="
+echo "Runtime: Node $(node --version), Java $(java -version 2>&1 | head -n 1)"
+echo "Lavalink: $LAVALINK_HOST:$LAVALINK_PORT"
+
+cd "$LAVALINK_DIR"
+java -Xmx"$LAVALINK_MEMORY" -jar Lavalink.jar &
 LAVALINK_PID=$!
-echo "      Lavalink started (PID: $LAVALINK_PID)"
+echo "Lavalink started with PID $LAVALINK_PID"
 
-# Wait for Lavalink to be ready
-echo "[2/3] Waiting for Lavalink..."
-LAVALINK_READY=false
-TIMEOUT=${LAVALINK_STARTUP_TIMEOUT:-60}
+echo "Waiting up to ${LAVALINK_STARTUP_TIMEOUT}s for Lavalink..."
 i=1
-while [ $i -le $TIMEOUT ] && [ "$LAVALINK_READY" = "false" ]; do
-    if curl -s --connect-timeout 2 http://localhost:2333/v4/info > /dev/null 2>&1; then
-        LAVALINK_READY=true
+while [ "$i" -le "$LAVALINK_STARTUP_TIMEOUT" ]; do
+    if ! kill -0 "$LAVALINK_PID" 2>/dev/null; then
+        echo "ERROR: Lavalink exited before it became ready." >&2
+        exit 1
+    fi
+
+    if curl --fail --silent --connect-timeout 2 "http://127.0.0.1:${LAVALINK_PORT}/v4/info" > /dev/null 2>&1; then
+        echo "Lavalink is ready."
         break
     fi
+
+    if [ "$i" -eq "$LAVALINK_STARTUP_TIMEOUT" ]; then
+        echo "ERROR: Lavalink did not become ready within ${LAVALINK_STARTUP_TIMEOUT}s." >&2
+        exit 1
+    fi
+
     sleep 1
-    i=$((i+1))
+    i=$((i + 1))
 done
 
-if [ "$LAVALINK_READY" = "false" ]; then
-    echo "ERROR: Lavalink failed to start within ${TIMEOUT} seconds"
-    cat /app/lavalink.log
-    exit 1
-fi
-echo "      Lavalink is ready!"
-
-# Start the Discord bot
-echo "[3/3] Starting Auralyn bot..."
-cd /app
-node src/index.js > /app/bot.log 2>&1 &
+cd "$APP_DIR"
+node "$BOT_ENTRYPOINT" &
 BOT_PID=$!
-echo "      Bot started (PID: $BOT_PID)"
+echo "Auralyn bot started with PID $BOT_PID"
+echo "Auralyn is running."
 
-# Watchdog loop: monitor Lavalink process
-echo "[4/4] Starting watchdog..."
-while kill -0 $LAVALINK_PID 2>/dev/null; do
+while :; do
+    if ! kill -0 "$LAVALINK_PID" 2>/dev/null; then
+        echo "ERROR: Lavalink process stopped." >&2
+        cleanup
+        exit 1
+    fi
+
+    if ! kill -0 "$BOT_PID" 2>/dev/null; then
+        echo "ERROR: Bot process stopped." >&2
+        cleanup
+        exit 1
+    fi
+
     sleep 5
 done
-
-# If we get here, Lavalink has died
-echo "ERROR: Lavalink process has died"
-exit 1

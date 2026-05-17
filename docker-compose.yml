@@ -12,17 +12,20 @@ services:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - CLIENT_ID=${CLIENT_ID}
       - GUILD_ID=${GUILD_ID}
-      - LAVALINK_HOST=localhost
+      - LAVALINK_HOST=127.0.0.1
       - LAVALINK_PORT=2333
-      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:?set LAVALINK_PASSWORD}
       - LAVALINK_SECURE=false
+      - LAVALINK_MEMORY=${LAVALINK_MEMORY:-1G}
+      - LAVALINK_STARTUP_TIMEOUT=${LAVALINK_STARTUP_TIMEOUT:-90}
+      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
+      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./lavalink/logs:/app/lavalink/logs
     ports:
       - "2333:2333"
-      - "8080:8080"
     networks:
       - auralyn-network
 

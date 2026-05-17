@@ -13,8 +13,8 @@ export default {
     }
 
     try {
-      client.musicPlayer.pause(interaction.guildId);
-      return interaction.editReply('Paused the current track!');
+      const paused = await client.musicPlayer.pause(interaction.guildId);
+      return interaction.editReply(paused ? 'Paused the current track!' : 'Nothing is currently playing.');
     } catch (error) {
       console.error('Error in pause command:', error);
       return interaction.editReply('There was an error while trying to pause the track!');

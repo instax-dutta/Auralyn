@@ -13,8 +13,8 @@ export default {
     }
 
     try {
-      client.musicPlayer.skip(interaction.guildId);
-      return interaction.editReply('Skipped the current track!');
+      const nextTrack = await client.musicPlayer.skip(interaction.guildId);
+      return interaction.editReply(nextTrack ? 'Skipped the current track!' : 'There is nothing to skip.');
     } catch (error) {
       console.error('Error in skip command:', error);
       return interaction.editReply('There was an error while trying to skip the track!');

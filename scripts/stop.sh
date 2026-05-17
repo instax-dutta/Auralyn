@@ -1,11 +1,5 @@
-#!/bin/bash
+#!/bin/sh
+set -eu
 
-echo "Stopping Auralyn..."
-
-# Kill Node.js process (the bot)
-pkill -f "node.*index.js" || true
-
-# Kill Lavalink
+pkill -f "node .*src/index.js" || true
 pkill -f "Lavalink.jar" || true
-
-echo "Auralyn stopped."

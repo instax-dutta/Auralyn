@@ -13,12 +13,7 @@ export default {
     }
 
     try {
-      client.musicPlayer.stop(interaction.guildId);
-      // Also, we might want to disconnect the voice connection
-      const connection = client.voice.adapterCreator ? client.voice.connections.get(interaction.guildId) : null;
-      if (connection) {
-        connection.disconnect();
-      }
+      await client.musicPlayer.stop(interaction.guildId);
       return interaction.editReply('Stopped the music and cleared the queue!');
     } catch (error) {
       console.error('Error in stop command:', error);

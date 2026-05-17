@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { trackArtwork, trackAuthor, trackLength, trackTitle, trackUri } from '../utils/tracks.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -17,16 +18,18 @@ export default {
 
     const embed = new EmbedBuilder()
       .setColor(0x6B4EFF) // AuralynColors.primary
-      .setTitle('🎶 Now Playing')
-      .setDescription(`[${currentTrack.title}](${currentTrack.uri || '#'})`)
+      .setTitle('Now Playing')
+      .setDescription(trackUri(currentTrack) ? `[${trackTitle(currentTrack)}](${trackUri(currentTrack)})` : trackTitle(currentTrack))
       .addFields(
-        { name: '👤 Author', value: currentTrack.author || 'Unknown', inline: true },
-        { name: '⏱️ Duration', value: currentTrack.duration || 'Unknown', inline: true },
-        { name: '🔊 Volume', value: `${playerState.volume}%`, inline: true },
-        { name: '🔁 Loop', value: ['Off', 'Track', 'Queue'][playerState.loopMode], inline: true }
+        { name: 'Author', value: trackAuthor(currentTrack), inline: true },
+        { name: 'Duration', value: trackLength(currentTrack), inline: true },
+        { name: 'Volume', value: `${playerState.volume}%`, inline: true },
+        { name: 'Loop', value: ['Off', 'Track', 'Queue'][playerState.loopMode], inline: true }
       )
-      .setThumbnail(currentTrack.thumbnail)
       .setTimestamp();
+
+    const thumbnail = trackArtwork(currentTrack);
+    if (thumbnail) embed.setThumbnail(thumbnail);
 
     return interaction.editReply({ embeds: [embed] });
   },

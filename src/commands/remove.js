@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { player } from '../index.js';
 import { AuralynColors } from '../utils/embeds.js';
+import { trackTitle } from '../utils/tracks.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -12,13 +12,14 @@ export default {
         .setRequired(true)
         .setMinValue(1)
     ),
-  async execute(interaction) {
-    const queue = player.nodes.get(interaction.guildId);
+  async execute(interaction, client) {
+    await interaction.deferReply();
+    const queue = client.musicPlayer.getQueue(interaction.guildId);
 
-    if (!queue || queue.tracks.length === 0) {
-      return interaction.reply({ 
+    if (queue.length === 0) {
+      return interaction.editReply({ 
         embeds: [new EmbedBuilder()
-          .setTitle('🗑️ Remove Track')
+          .setTitle('Remove Track')
           .setDescription('The queue is empty.')
           .setColor(AuralynColors.warning)
           .setTimestamp()
@@ -26,12 +27,12 @@ export default {
       });
     }
 
-    const position = interaction.options.getInteger('position') - 1;
-
-    if (position < 0 || position >= queue.tracks.length) {
-      return interaction.reply({ 
+    const position = interaction.options.getInteger('position');
+    const track = client.musicPlayer.remove(interaction.guildId, position);
+    if (!track) {
+      return interaction.editReply({ 
         embeds: [new EmbedBuilder()
-          .setTitle('🗑️ Remove Track')
+          .setTitle('Remove Track')
           .setDescription('Invalid position specified.')
           .setColor(AuralynColors.error)
           .setTimestamp()
@@ -39,13 +40,10 @@ export default {
       });
     }
 
-    const track = queue.tracks[position];
-    queue.tracks.splice(position, 1);
-
-    await interaction.reply({ 
+    return interaction.editReply({ 
       embeds: [new EmbedBuilder()
-        .setTitle('🗑️ Track Removed')
-        .setDescription(`Removed: **${track.title}**`)
+        .setTitle('Track Removed')
+        .setDescription(`Removed: **${trackTitle(track)}**`)
         .setColor(AuralynColors.success)
         .setTimestamp()
       ]

@@ -1,118 +1,112 @@
 {
-  "name": "Auralyn",
-  "author": "YourName",
-  "description": "A Discord music bot with Lavalink v4 built-in",
-  "features": {
-    "docker": {
-      "image": "ghcr.io/yourrepo/auralyn:latest",
-      "app": {
-        "startup": {
-          "done": "Starting Auralyn bot",
-          "container": {
-            "startup": {
-              "general": [
-                {
-                  "action": "wait",
-                  "timeout": 5,
-                  "output": "Starting Auralyn bot"
-                },
-                {
-                  "action": "stop"
-                }
-              ]
-            }
-          }
-        },
-        "stop": "kill $(cat /app/lavalink.pid) && kill $(cat /app/bot.pid)"
-      },
-      "configs": {
-        "files": {
-          "app/.env": "env"
-        },
-        "location": "app"
-      }
-    },
-    "process": {
-      "name": "Auralyn",
-      "mappings": {
-        "startup": {
-          "done": {
-            "match": "Auralyn bot started successfully"
-          }
-        }
-      },
-      "default": {
-        "run": "/app/scripts/start.sh"
-      }
-    },
-    "logs": {
-      "custom": {
-        "location": "logs"
-      }
-    },
-    "mounts": {
-      "configs": [
-        {
-          "source": "lavalink/logs",
-          "target": "/app/lavalink/logs"
-        },
-        {
-          "source": "logs",
-          "target": "/app/logs"
-        }
-      ]
+  "_comment": "DO NOT EDIT: FILE GENERATED FOR PTERODACTYL PANEL IMPORT",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-05-17T00:00:00+00:00",
+  "name": "Auralyn Discord Music Bot",
+  "author": "admin@example.com",
+  "description": "Runs the Auralyn Discord music bot and its bundled Lavalink server in one Docker container.",
+  "features": null,
+  "docker_images": {
+    "Auralyn bundled": "ghcr.io/instax-dutta/auralyn:latest"
+  },
+  "file_denylist": [],
+  "startup": "/app/scripts/start.sh",
+  "config": {
+    "files": "{}",
+    "startup": "{\r\n  \"done\": \"Auralyn is running.\"\r\n}",
+    "logs": "{}",
+    "stop": "^^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/ash\nset -eu\nmkdir -p /mnt/server\ncd /mnt/server\necho \"Auralyn uses a prebuilt bundled Docker image. No source install is required.\"\n",
+      "container": "alpine:3.20",
+      "entrypoint": "ash"
     }
   },
   "variables": [
     {
-      "name": "DISCORD_TOKEN",
-      "description": "Your Discord bot token",
-      "envVariable": "DISCORD_TOKEN",
-      "defaultValue": "",
-      "userViewable": false
+      "name": "Discord Bot Token",
+      "description": "The Discord bot token. Keep this private and rotate it immediately if exposed.",
+      "env_variable": "DISCORD_TOKEN",
+      "default_value": "",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "required|string|min:20",
+      "field_type": "text"
     },
     {
-      "name": "CLIENT_ID",
-      "description": "Your Discord client ID",
-      "envVariable": "CLIENT_ID",
-      "defaultValue": ""
+      "name": "Discord Client ID",
+      "description": "The Discord application client ID used for slash command registration.",
+      "env_variable": "CLIENT_ID",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
     },
     {
-      "name": "GUILD_ID",
-      "description": "Your Discord server ID (for guild commands)",
-      "envVariable": "GUILD_ID",
-      "defaultValue": ""
+      "name": "Guild ID",
+      "description": "Optional development guild ID for fast slash command deployment. Leave empty for global commands.",
+      "env_variable": "GUILD_ID",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
     },
     {
-      "name": "LAVALINK_PASSWORD",
-      "description": "Lavalink server password",
-      "envVariable": "LAVALINK_PASSWORD",
-      "defaultValue": "youshallnotpass"
+      "name": "Lavalink Password",
+      "description": "Shared password between the bot and the bundled Lavalink server. Use a long random value.",
+      "env_variable": "LAVALINK_PASSWORD",
+      "default_value": "",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "required|string|min:16",
+      "field_type": "text"
     },
     {
-      "name": "LAVALINK_MEMORY",
-      "description": "Memory allocated to Lavalink (e.g., 1G, 2G)",
-      "envVariable": "LAVALINK_MEMORY",
-      "defaultValue": "1G"
+      "name": "Lavalink Memory",
+      "description": "Maximum heap for Lavalink, for example 512M, 1G, or 2G.",
+      "env_variable": "LAVALINK_MEMORY",
+      "default_value": "1G",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
     },
     {
-      "name": "LAVALINK_STARTUP_TIMEOUT",
-      "description": "Timeout in seconds for Lavalink to start",
-      "envVariable": "LAVALINK_STARTUP_TIMEOUT",
-      "defaultValue": "60"
+      "name": "Lavalink Startup Timeout",
+      "description": "Seconds to wait for Lavalink to become healthy before failing startup.",
+      "env_variable": "LAVALINK_STARTUP_TIMEOUT",
+      "default_value": "90",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:30|max:300",
+      "field_type": "text"
     },
     {
-      "name": "SPOTIFY_CLIENT_ID",
-      "description": "Spotify client ID for LavaSrc plugin",
-      "envVariable": "SPOTIFY_CLIENT_ID",
-      "defaultValue": ""
+      "name": "Spotify Client ID",
+      "description": "Optional Spotify client ID for LavaSrc.",
+      "env_variable": "SPOTIFY_CLIENT_ID",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
     },
     {
-      "name": "SPOTIFY_CLIENT_SECRET",
-      "description": "Spotify client secret for LavaSrc plugin",
-      "envVariable": "SPOTIFY_CLIENT_SECRET",
-      "defaultValue": ""
+      "name": "Spotify Client Secret",
+      "description": "Optional Spotify client secret for LavaSrc. Keep private.",
+      "env_variable": "SPOTIFY_CLIENT_SECRET",
+      "default_value": "",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "nullable|string",
+      "field_type": "text"
     }
-  ],
-  "thumbnail": "https://example.com/auralyn.png"
+  ]
 }

@@ -1,13 +1,17 @@
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
-import { Shoukaku } from 'shoukaku';
+import { Connectors, Shoukaku } from 'shoukaku';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
 
 dotenv.config();
 
-console.log('Starting Auralyn bot...');
+const config = loadConfig();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const client = new Client({
   intents: [
@@ -15,52 +19,49 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
   ],
 });
+client.commands = new Collection();
 
-// Shoukaku instance
-const shoukaku = new Shoukaku(client, {
-  name: 'Auralyn',
-  send: (guildId, payload) => {
-    const guild = client.guilds.cache.get(guildId);
-    if (guild && guild.shard) {
-      guild.shard.send({
-        op: 'voiceUpdate',
-        d: {
-          guildId,
-          state: {
-            ...guild.voiceStates.get(client.user.id) || {},
-            ...payload,
-          },
-        },
-      });
-    }
+const shoukaku = new Shoukaku(
+  new Connectors.DiscordJS(client),
+  [{
+    name: 'main',
+    url: `${config.lavalink.host}:${config.lavalink.port}`,
+    auth: config.lavalink.password,
+    secure: config.lavalink.secure,
+  }],
+  {
+    resume: true,
+    resumeTimeout: 60,
+    reconnectTries: 5,
+    reconnectInterval: 5,
+    restTimeout: 30,
   },
-});
+);
 
-// Music player instance
 client.musicPlayer = new MusicPlayer(shoukaku);
 
-// Load commands
 const loadCommands = async () => {
-  const commandsPath = path.join(process.cwd(), 'src', 'commands');
+  const commandsPath = path.join(__dirname, 'commands');
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
   for (const file of commandFiles) {
     const filePath = path.join(commandsPath, file);
-    const command = (await import(`file://${filePath}`)).default;
+    const command = (await import(pathToFileURL(filePath).href)).default;
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
+    } else {
+      throw new Error(`Command ${file} must export data and execute.`);
     }
   }
 };
 
-// Load events
 const loadEvents = async () => {
-  const eventsPath = path.join(process.cwd(), 'src', 'events');
+  const eventsPath = path.join(__dirname, 'events');
   const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
   for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
-    const event = (await import(`file://${filePath}`)).default;
+    const event = (await import(pathToFileURL(filePath).href)).default;
     if (event.once) {
       client.once(event.name, (...args) => event.execute(...args, client, shoukaku));
     } else {
@@ -69,28 +70,50 @@ const loadEvents = async () => {
   }
 };
 
-async function main() {
-  // Load commands and events
+const setupShoukakuEvents = () => {
+  shoukaku.on('ready', (name, resumed) => {
+    console.log(`Lavalink node ${name} ready${resumed ? ' (resumed)' : ''}`);
+  });
+  shoukaku.on('error', (name, error) => {
+    console.error(`Lavalink node ${name} error:`, error);
+  });
+  shoukaku.on('close', (name, code, reason) => {
+    console.warn(`Lavalink node ${name} closed (${code}): ${reason ?? 'no reason'}`);
+  });
+  shoukaku.on('disconnect', (name, playerCount) => {
+    console.warn(`Lavalink node ${name} disconnected. players=${playerCount}`);
+  });
+};
+
+const shutdown = async (signal) => {
+  console.log(`Received ${signal}. Shutting down Auralyn...`);
+  for (const guildId of [...client.musicPlayer.players.keys()]) {
+    await client.musicPlayer.disconnect(guildId).catch(error => {
+      console.error(`Failed to disconnect guild ${guildId}:`, error);
+    });
+  }
+  client.destroy();
+  process.exit(0);
+};
+
+export async function main() {
+  console.log('Starting Auralyn bot...');
   await loadCommands();
   await loadEvents();
-
-  // Set up Lavalink node with a name so we can retrieve it later
-  shoukaku.initiateConnection({
-    nodes: [{
-      host: 'localhost',
-      port: 2333,
-      password: process.env.LAVALINK_PASSWORD,
-      secure: false,
-      name: 'main'
-    }]
-  });
-
-  // Login to Discord
-  await client.login(process.env.DISCORD_TOKEN);
+  setupShoukakuEvents();
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  await client.login(config.discordToken);
   console.log('Auralyn bot started successfully!');
 }
 
-main().catch(console.error);
+const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-// Export for use in tests if needed
+if (isMainModule) {
+  main().catch(error => {
+    console.error('Auralyn failed to start:', error);
+    process.exit(1);
+  });
+}
+
 export { client, shoukaku };

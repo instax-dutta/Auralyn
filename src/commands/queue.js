@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { AuralynColors } from '../utils/embeds.js';
+import { trackLength, trackTitle, trackUri } from '../utils/tracks.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -20,23 +21,23 @@ export default {
     // We'll create an embed for the queue
     const embed = new EmbedBuilder()
       .setColor(AuralynColors.primary)
-      .setTitle('🎵 Music Queue');
+      .setTitle('Music Queue');
 
     if (currentTrack) {
       embed.addFields({
-        name: '▶️ Now Playing',
-        value: `[${currentTrack.title}](${currentTrack.uri || '#'}) \`${currentTrack.duration || 'Unknown'}\``,
+        name: 'Now Playing',
+        value: `${formatTrack(currentTrack)} \`${trackLength(currentTrack)}\``,
         inline: false,
       });
     }
 
     if (queue.length > 0) {
       const tracksInQueue = queue.slice(0, 10).map((track, index) => 
-        '`' + (index + 1) + '.` [' + track.title + '](' + (track.uri || '#') + ') `' + (track.duration || 'Unknown') + '`'
+        '`' + (index + 1) + '.` ' + formatTrack(track) + ' `' + trackLength(track) + '`'
       ).join('\n');
 
       embed.addFields({
-        name: '📋 Up Next',
+        name: 'Up Next',
         value: tracksInQueue || 'Queue is empty',
         inline: false,
       });
@@ -46,7 +47,7 @@ export default {
       }
     } else {
       embed.addFields({
-        name: '📋 Up Next',
+        name: 'Up Next',
         value: 'Queue is empty',
         inline: false,
       });
@@ -57,3 +58,9 @@ export default {
     return interaction.editReply({ embeds: [embed] });
   },
 };
+
+function formatTrack(track) {
+  const uri = trackUri(track);
+  const title = trackTitle(track);
+  return uri ? `[${title}](${uri})` : title;
+}

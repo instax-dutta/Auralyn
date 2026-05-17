@@ -21,8 +21,8 @@ export default {
     const volume = interaction.options.getInteger('volume');
 
     try {
-      client.musicPlayer.setVolume(interaction.guildId, volume);
-      return interaction.editReply(`Set the volume to ${volume}%`);
+      const safeVolume = await client.musicPlayer.setVolume(interaction.guildId, volume);
+      return interaction.editReply(`Set the volume to ${safeVolume}%`);
     } catch (error) {
       console.error('Error in volume command:', error);
       return interaction.editReply('There was an error while trying to set the volume!');

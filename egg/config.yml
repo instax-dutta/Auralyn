@@ -1,23 +1,32 @@
-name: Auralyn Music Bot
-description: Discord music bot with integrated Lavalink server
-author: YourName
-cpu: 1000
-memory: 2048
-disk: 10240
-image: ghcr.io/yourrepo/auralyn:latest
-startup: "node src/index.js"
-command: ""
+name: Auralyn Discord Music Bot
+description: Single-image Discord music bot with bundled Lavalink
+author: admin@example.com
+image: ghcr.io/instax-dutta/auralyn:latest
+startup: /app/scripts/start.sh
+done: Auralyn is running.
+requirements:
+  memory_mb: 2048
+  disk_mb: 1024
+  ports:
+    - 2333
 environment:
+  NODE_ENV: production
   DISCORD_TOKEN: ""
   CLIENT_ID: ""
   GUILD_ID: ""
-  LAVALINK_HOST: localhost
+  LAVALINK_HOST: 127.0.0.1
   LAVALINK_PORT: "2333"
-  LAVALINK_PASSWORD: youshallnotpass
+  LAVALINK_PASSWORD: ""
   LAVALINK_SECURE: "false"
-  NODE_ENV: production
-mounts:
-  /app/logs: logs
-  /app/lavalink/logs: lavalink/logs
-  /app/.env: .env
-stop: pkill -f node
+  LAVALINK_MEMORY: 1G
+  LAVALINK_STARTUP_TIMEOUT: "90"
+  SPOTIFY_CLIENT_ID: ""
+  SPOTIFY_CLIENT_SECRET: ""
+security:
+  required_private_variables:
+    - DISCORD_TOKEN
+    - LAVALINK_PASSWORD
+    - SPOTIFY_CLIENT_SECRET
+  notes:
+    - Set LAVALINK_PASSWORD to a long random value; no default password is provided.
+    - Do not expose port 2333 publicly unless you intentionally want external Lavalink access.

@@ -13,8 +13,8 @@ export default {
     }
 
     try {
-      client.musicPlayer.resume(interaction.guildId);
-      return interaction.editReply('Resumed the current track!');
+      const resumed = await client.musicPlayer.resume(interaction.guildId);
+      return interaction.editReply(resumed ? 'Resumed the current track!' : 'Nothing is currently paused.');
     } catch (error) {
       console.error('Error in resume command:', error);
       return interaction.editReply('There was an error while trying to resume the track!');

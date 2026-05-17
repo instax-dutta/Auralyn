@@ -58,12 +58,12 @@ docker-compose up -d
 
 1. Build and push the image to your registry:
 ```bash
-docker build -t ghcr.io/yourrepo/auralyn:latest .
-docker push ghcr.io/yourrepo/auralyn:latest
+docker build -t ghcr.io/instax-dutta/auralyn:latest .
+docker push ghcr.io/instax-dutta/auralyn:latest
 ```
 
 2. In your panel, create a new egg with:
-   - Image: `ghcr.io/yourrepo/auralyn:latest`
+   - Image: `ghcr.io/instax-dutta/auralyn:latest`
    - Startup: `node src/index.js`
    - Memory: 2048MB
    - CPU: 100%

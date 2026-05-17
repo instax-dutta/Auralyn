@@ -14,7 +14,7 @@ fi
 
 # Get image name from argument or use default
 IMAGE_NAME=${1:-auralyn:latest}
-REGISTRY=${2:-ghcr.io/yourrepo}
+REGISTRY=${2:-ghcr.io/instax-dutta}
 
 echo "Building image: $IMAGE_NAME"
 
