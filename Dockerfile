@@ -30,9 +30,8 @@ COPY src ./src
 COPY scripts ./scripts
 COPY lavalink/Lavalink.jar ./lavalink/Lavalink.jar
 COPY lavalink/application.yml ./lavalink/application.yml
-COPY lavalink/plugins ./lavalink/plugins
 
-RUN mkdir -p /app/logs /app/data /app/lavalink/logs \
+RUN mkdir -p /app/logs /app/data /app/lavalink/logs /app/lavalink/plugins \
   && chmod +x scripts/*.sh \
   && chown -R nodeuser:nodegroup /app
 
