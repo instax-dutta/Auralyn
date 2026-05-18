@@ -36,8 +36,10 @@ export class MusicPlayer {
     state.textChannel = textChannel;
     state.voiceChannel = voiceChannel;
     state.queue.push(track);
+    console.log(`Enqueued track for guild ${guildId}: ${track?.info?.title ?? 'unknown track'}`);
 
     if (!state.isPlaying) {
+      console.log(`Guild ${guildId} is idle, starting playback`);
       await this.playNext(guildId);
     }
 
@@ -55,6 +57,7 @@ export class MusicPlayer {
       throw new Error('Cannot create Lavalink player without a voice channel.');
     }
 
+    console.log(`Joining voice channel ${state.voiceChannel.id} for guild ${guildId}`);
     const player = await this.shoukaku.joinVoiceChannel({
       guildId,
       channelId: state.voiceChannel.id,
@@ -62,6 +65,7 @@ export class MusicPlayer {
       deaf: true,
       mute: false,
     });
+    console.log(`Joined voice channel ${state.voiceChannel.id} for guild ${guildId}`);
 
     const listeners = {
       end: (event) => this.handleTrackEnd(guildId, event),
@@ -84,6 +88,7 @@ export class MusicPlayer {
     const nextTrack = this.getNextTrack(state);
 
     if (!nextTrack) {
+      console.log(`No next track available for guild ${guildId}`);
       state.currentTrack = null;
       state.isPlaying = false;
       state.isPaused = false;
@@ -94,8 +99,11 @@ export class MusicPlayer {
     state.isPlaying = true;
     state.isPaused = false;
 
+    console.log(`Preparing to play track for guild ${guildId}: ${nextTrack?.info?.title ?? 'unknown track'}`);
     const player = await this.getOrCreateLavalinkPlayer(guildId);
+    console.log(`Sending playTrack to Lavalink for guild ${guildId}`);
     await player.playTrack({ track: { encoded: nextTrack.encoded } });
+    console.log(`playTrack completed for guild ${guildId}`);
     return nextTrack;
   }
 
