@@ -6,6 +6,9 @@ RUN npm ci --omit=dev --ignore-scripts
 
 FROM node:20-alpine
 
+ARG YOUTUBE_PLUGIN_VERSION=1.18.1
+ARG LAVASRC_PLUGIN_VERSION=4.8.2
+
 RUN apk add --no-cache \
     bash \
     curl \
@@ -32,6 +35,12 @@ COPY lavalink/Lavalink.jar ./lavalink/Lavalink.jar
 COPY lavalink/application.yml ./lavalink/application.yml
 
 RUN mkdir -p /app/logs /app/data /app/lavalink/logs /app/lavalink/plugins \
+  && curl --fail --silent --show-error --location \
+    "https://maven.lavalink.dev/releases/dev/lavalink/youtube/youtube-plugin/${YOUTUBE_PLUGIN_VERSION}/youtube-plugin-${YOUTUBE_PLUGIN_VERSION}.jar" \
+    --output "/app/lavalink/plugins/youtube-plugin-${YOUTUBE_PLUGIN_VERSION}.jar" \
+  && curl --fail --silent --show-error --location \
+    "https://maven.lavalink.dev/releases/com/github/topi314/lavasrc/lavasrc-plugin/${LAVASRC_PLUGIN_VERSION}/lavasrc-plugin-${LAVASRC_PLUGIN_VERSION}.jar" \
+    --output "/app/lavalink/plugins/lavasrc-plugin-${LAVASRC_PLUGIN_VERSION}.jar" \
   && chmod +x scripts/*.sh \
   && chown -R nodeuser:nodegroup /app
 
