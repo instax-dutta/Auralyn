@@ -36,6 +36,3 @@ export default {
     return interaction.editReply(reply);
   },
 };
-    });
-  },
-};
