@@ -16,7 +16,7 @@ export default {
     const guild = oldState.guild || newState.guild;
     if (!guild) return;
 
-    const botVoiceState = guild.voiceStates.get(client.user.id);
+    const botVoiceState = guild.voiceStates.cache.get(client.user.id);
     if (!botVoiceState?.channelId) return;
 
     const botChannelId = botVoiceState.channelId;
@@ -31,7 +31,7 @@ export default {
         if (existingTimeout) clearTimeout(existingTimeout);
 
         const timeoutId = setTimeout(async () => {
-          const botVoiceStateCheck = guild.voiceStates.get(client.user.id);
+          const botVoiceStateCheck = guild.voiceStates.cache.get(client.user.id);
           if (botVoiceStateCheck?.channelId === botChannelId) {
             const channelCheck = guild.channels.cache.get(botChannelId);
             if (channelCheck && channelCheck.isVoiceBased()) {
