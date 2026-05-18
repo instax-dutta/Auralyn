@@ -29,25 +29,45 @@ export async function loadCommandPayloads() {
   return commands;
 }
 
+export function getCommandDeploymentTargets(config) {
+  const targets = [
+    { scope: 'global', clientId: config.clientId },
+  ];
+
+  if (config.guildId) {
+    targets.push({
+      scope: 'guild',
+      clientId: config.clientId,
+      guildId: config.guildId,
+    });
+  }
+
+  return targets;
+}
+
 export async function deployCommands(config = loadConfig()) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
+  const targets = getCommandDeploymentTargets(config);
 
   logger.info(`Refreshing ${commands.length} application commands.`);
 
-  if (config.guildId) {
+  for (const target of targets) {
+    if (target.scope === 'global') {
+      const data = await rest.put(
+        Routes.applicationCommands(target.clientId),
+        { body: commands },
+      );
+      logger.info(`Registered ${data.length} global commands. Propagation can take up to one hour.`);
+      continue;
+    }
+
     const data = await rest.put(
-      Routes.applicationGuildCommands(config.clientId, config.guildId),
+      Routes.applicationGuildCommands(target.clientId, target.guildId),
       { body: commands },
     );
-    logger.info(`Registered ${data.length} guild commands for ${config.guildId}.`);
-  } else {
-    const data = await rest.put(
-      Routes.applicationCommands(config.clientId),
-      { body: commands },
-    );
-    logger.info(`Registered ${data.length} global commands. Propagation can take up to one hour.`);
+    logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
   }
 }
 

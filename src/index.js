@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
 import { createLogger } from './utils/logger.js';
+import { deployCommands } from './utils/deploy-commands.js';
 
 dotenv.config();
 
@@ -107,6 +108,7 @@ export async function main() {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
+  await deployCommands(config);
   logger.info('Auralyn bot started successfully');
 }
 
