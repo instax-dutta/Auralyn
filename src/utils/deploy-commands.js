@@ -4,6 +4,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from '../config.js';
+import { createLogger } from './logger.js';
 
 dotenv.config();
 
@@ -29,23 +30,24 @@ export async function loadCommandPayloads() {
 }
 
 export async function deployCommands(config = loadConfig()) {
+  const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
 
-  console.log(`Refreshing ${commands.length} application commands.`);
+  logger.info(`Refreshing ${commands.length} application commands.`);
 
   if (config.guildId) {
     const data = await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
       { body: commands },
     );
-    console.log(`Registered ${data.length} guild commands for ${config.guildId}.`);
+    logger.info(`Registered ${data.length} guild commands for ${config.guildId}.`);
   } else {
     const data = await rest.put(
       Routes.applicationCommands(config.clientId),
       { body: commands },
     );
-    console.log(`Registered ${data.length} global commands. Propagation can take up to one hour.`);
+    logger.info(`Registered ${data.length} global commands. Propagation can take up to one hour.`);
   }
 }
 
@@ -53,7 +55,8 @@ const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(proces
 
 if (isMainModule) {
   deployCommands().catch(error => {
-    console.error('Failed to deploy commands:', error);
+    const logger = createLogger({ level: process.env.LOG_LEVEL ?? 'info', scope: 'deploy' });
+    logger.error('Failed to deploy commands', error);
     process.exit(1);
   });
 }

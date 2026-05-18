@@ -35,6 +35,7 @@ export function loadConfig() {
     discordToken: requireEnv('DISCORD_TOKEN'),
     clientId: requireEnv('CLIENT_ID'),
     guildId: optionalEnv('GUILD_ID'),
+    logLevel: optionalEnv('LOG_LEVEL', 'info'),
     lavalink: {
       host: optionalEnv('LAVALINK_HOST', '127.0.0.1'),
       port: optionalNumberEnv('LAVALINK_PORT', 2333),

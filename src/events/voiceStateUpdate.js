@@ -40,7 +40,7 @@ export default {
                 try {
                   await client.musicPlayer.stop(guild.id);
                 } catch (err) {
-                  console.error(`Error leaving voice channel in guild ${guild.id}:`, err);
+                  client.logger.error(`Error leaving voice channel in guild ${guild.id}`, err);
                 }
               }
             }

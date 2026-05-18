@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, buildQueueReply } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -9,15 +10,21 @@ export default {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply('You need to be in a voice channel to use this command!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before shuffling the queue.', false)],
+        components: [],
+      });
     }
 
     try {
       client.musicPlayer.shuffle(interaction.guildId);
-      return interaction.editReply('Shuffled the queue!');
+      return interaction.editReply(buildQueueReply(client, interaction.guildId));
     } catch (error) {
-      console.error('Error in shuffle command:', error);
-      return interaction.editReply('There was an error while trying to shuffle the queue!');
+      client.logger.error('Error in shuffle command', error);
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Shuffle Failed', 'There was an error while trying to shuffle the queue.', false)],
+        components: [],
+      });
     }
   },
 };

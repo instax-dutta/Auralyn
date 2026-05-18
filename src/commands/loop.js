@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -18,7 +19,10 @@ export default {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply('You need to be in a voice channel to use this command!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before changing loop mode.', false)],
+        components: [],
+      });
     }
 
     const mode = interaction.options.getString('mode');
@@ -34,15 +38,21 @@ export default {
         loopMode = 2;
         break;
       default:
-        return interaction.editReply('Invalid loop mode!');
+        return interaction.editReply({
+          embeds: [buildActionFeedback('Loop Mode', 'That loop mode is not valid.', false)],
+          components: [],
+        });
     }
 
     try {
       client.musicPlayer.setLoopMode(interaction.guildId, loopMode);
-      return interaction.editReply(`Loop mode set to: ${mode}`);
+      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Loop Updated');
     } catch (error) {
-      console.error('Error in loop command:', error);
-      return interaction.editReply('There was an error while trying to set the loop mode!');
+      client.logger.error('Error in loop command', error);
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Loop Update Failed', 'There was an error while trying to set the loop mode.', false)],
+        components: [],
+      });
     }
   },
 };

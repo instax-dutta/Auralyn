@@ -4,11 +4,11 @@ export default {
   name: Events.ClientReady,
   once: true,
   async execute(client) {
-    console.log(`🤖 Auralyn is ready! Logged in as ${client.user.tag}`);
-    console.log(`📊 Serving ${client.guilds.cache.size} servers`);
+    client.logger.info(`Ready as ${client.user.tag}`);
+    client.logger.info(`Serving ${client.guilds.cache.size} servers`);
     
     client.user.setActivity({
-      name: '/play | 🎵 Your Music Bot',
+      name: '/play | cinematic music',
       type: 0,
     });
   },

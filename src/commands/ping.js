@@ -21,8 +21,9 @@ export default {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('Auralyn Status')
+      .setTitle('Auralyn | Status')
       .setColor(statusColor)
+      .setDescription('Operational and ready for playback.')
       .addFields(
         { name: 'API Latency', value: `\`${latency}ms\``, inline: true },
         { name: 'WebSocket', value: `\`${wsLatency}ms\``, inline: true },

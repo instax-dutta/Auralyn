@@ -1,4 +1,17 @@
-import { EmbedBuilder } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+} from 'discord.js';
+import { formatLoopMode } from './formatters.js';
+import {
+  trackArtwork,
+  trackAuthor,
+  trackLength,
+  trackTitle,
+  trackUri,
+} from './tracks.js';
 
 export const AuralynColors = {
   primary: 0x6B4EFF,
@@ -7,6 +20,12 @@ export const AuralynColors = {
   warning: 0xF59E0B,
   info: 0x3B82F6,
   dark: 0x1E1E2E,
+  accent: 0xA78BFA,
+};
+
+export const AURALYN_BRAND = {
+  name: 'Auralyn',
+  iconUrl: 'https://cdn.discordapp.com/attachments/000000000000000000/000000000000000000/auralyn-logo.png',
 };
 
 export function createEmbed(options = {}) {
@@ -85,5 +104,90 @@ export function musicEmbed(description, title = '🎵 Auralyn') {
   });
 }
 
-// Note: The nowPlayingEmbed and queueEmbed functions are not included here as they are specific and we are building them in the commands.
-// However, if we want to reuse, we can add them. For now, we leave them out.
+export function createNowPlayingEmbed({
+  track,
+  loopModeLabel,
+  volume,
+  queueLength,
+  requestedBy,
+}) {
+  const embed = createEmbed({
+    title: 'Auralyn | Now Playing',
+    description: trackUri(track) ? `**[${trackTitle(track)}](${trackUri(track)})**` : `**${trackTitle(track)}**`,
+    color: AuralynColors.primary,
+    timestamp: true,
+    footer: {
+      text: 'Auralyn playback session',
+    },
+  }).addFields(
+    { name: 'Artist', value: trackAuthor(track), inline: true },
+    { name: 'Duration', value: trackLength(track), inline: true },
+    { name: 'Volume', value: `${volume}%`, inline: true },
+    { name: 'Loop', value: loopModeLabel, inline: true },
+    { name: 'Up Next', value: queueLength > 0 ? `${queueLength} queued` : 'Queue is empty', inline: true },
+    { name: 'Requested By', value: requestedBy ?? 'Unknown', inline: true },
+  );
+
+  const artwork = trackArtwork(track);
+  if (artwork) embed.setThumbnail(artwork);
+  return embed;
+}
+
+export function createQueueEmbed({ currentTrack, queue, loopMode, volume }) {
+  const embed = createEmbed({
+    title: 'Auralyn | Queue',
+    description: currentTrack ? 'Current playback and upcoming tracks.' : 'No track is currently playing.',
+    color: AuralynColors.accent,
+    timestamp: true,
+  });
+
+  if (currentTrack) {
+    embed.addFields({
+      name: 'Now Playing',
+      value: trackUri(currentTrack)
+        ? `[${trackTitle(currentTrack)}](${trackUri(currentTrack)}) • \`${trackLength(currentTrack)}\``
+        : `${trackTitle(currentTrack)} • \`${trackLength(currentTrack)}\``,
+      inline: false,
+    });
+  }
+
+  embed.addFields(
+    {
+      name: 'Up Next',
+      value: queue.length > 0
+        ? queue.slice(0, 10).map((track, index) => `\`${index + 1}.\` ${trackUri(track) ? `[${trackTitle(track)}](${trackUri(track)})` : trackTitle(track)} • \`${trackLength(track)}\``).join('\n')
+        : 'Queue is empty.',
+      inline: false,
+    },
+    {
+      name: 'Playback',
+      value: `Loop: ${formatLoopMode(loopMode)}\nVolume: ${volume}%`,
+      inline: false,
+    },
+  );
+
+  if (queue.length > 10) {
+    embed.setFooter({ text: `And ${queue.length - 10} more in queue` });
+  }
+
+  return embed;
+}
+
+export function buildPlayerControls({ guildId, isPaused }) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`auralyn:skip:${guildId}`)
+        .setLabel('Skip')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`auralyn:${isPaused ? 'resume' : 'pause'}:${guildId}`)
+        .setLabel(isPaused ? 'Resume' : 'Pause')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`auralyn:stop:${guildId}`)
+        .setLabel('Stop')
+        .setStyle(ButtonStyle.Danger),
+    ),
+  ];
+}

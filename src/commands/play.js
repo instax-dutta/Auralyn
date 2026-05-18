@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 import { resolveTrack, trackTitle, trackUri } from '../utils/tracks.js';
 
 export default {
@@ -11,47 +12,48 @@ export default {
         .setRequired(true)),
 
   async execute(interaction, client, shoukaku) {
-    console.log(`/play received with query: ${interaction.options.getString('query') ?? '<missing>'}`);
     await interaction.deferReply();
-    console.log('/play deferred reply successfully');
 
     const query = interaction.options.getString('query');
     const voiceChannel = interaction.member.voice.channel;
 
     if (!voiceChannel) {
-      console.log('/play aborted because member is not in a voice channel');
-      return interaction.editReply('You need to be in a voice channel to play music!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before using `/play`.', false)],
+        components: [],
+      });
     }
 
     const botVoiceChannelId = interaction.guild.members.me?.voice.channelId;
     if (botVoiceChannelId && botVoiceChannelId !== voiceChannel.id) {
-      console.log(`/play aborted because bot is already in voice channel ${botVoiceChannelId}`);
-      return interaction.editReply('I am already connected to a different voice channel!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Session Locked', 'Auralyn is already connected to a different voice channel.', false)],
+        components: [],
+      });
     }
 
     try {
-      console.log(`/play resolving track for query: ${query}`);
       const { track } = await resolveTrack(shoukaku, query);
       if (!track) {
-        console.log(`/play found no playable result for query: ${query}`);
-        return interaction.editReply('I could not find a playable result for that query.');
+        return interaction.editReply({
+          embeds: [buildActionFeedback('No Results', 'Auralyn could not find a playable result for that search.', false)],
+          components: [],
+        });
       }
 
-      console.log(`/play resolved track: ${trackTitle(track)}`);
       await client.musicPlayer.enqueue({
         guildId: interaction.guildId,
         track,
         textChannel: interaction.channel,
         voiceChannel,
       });
-      console.log(`/play enqueued track for guild ${interaction.guildId}`);
-
-      const uri = trackUri(track);
-      const title = trackTitle(track);
-      return interaction.editReply(`Added to queue: ${uri ? `**[${title}](${uri})**` : `**${title}**`}`);
+      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Added to Queue');
     } catch (error) {
-      console.error('Error in play command:', error);
-      return interaction.editReply('There was an error while trying to play that song!');
+      client.logger.error('Error in play command', error);
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Playback Failed', 'There was an error while trying to play that song.', false)],
+        components: [],
+      });
     }
   },
 };

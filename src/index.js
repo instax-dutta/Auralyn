@@ -6,10 +6,12 @@ import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
+import { createLogger } from './utils/logger.js';
 
 dotenv.config();
 
 const config = loadConfig();
+const logger = createLogger({ level: config.logLevel, scope: 'auralyn' });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -20,6 +22,7 @@ const client = new Client({
   ],
 });
 client.commands = new Collection();
+client.logger = logger;
 
 const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
@@ -38,7 +41,7 @@ const shoukaku = new Shoukaku(
   },
 );
 
-client.musicPlayer = new MusicPlayer(shoukaku);
+client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'));
 
 const loadCommands = async () => {
   const commandsPath = path.join(__dirname, 'commands');
@@ -72,24 +75,24 @@ const loadEvents = async () => {
 
 const setupShoukakuEvents = () => {
   shoukaku.on('ready', (name, resumed) => {
-    console.log(`Lavalink node ${name} ready${resumed ? ' (resumed)' : ''}`);
+    logger.info(`Lavalink node ${name} ready${resumed ? ' (resumed)' : ''}`);
   });
   shoukaku.on('error', (name, error) => {
-    console.error(`Lavalink node ${name} error:`, error);
+    logger.error(`Lavalink node ${name} error`, error);
   });
   shoukaku.on('close', (name, code, reason) => {
-    console.warn(`Lavalink node ${name} closed (${code}): ${reason ?? 'no reason'}`);
+    logger.warn(`Lavalink node ${name} closed (${code}): ${reason ?? 'no reason'}`);
   });
   shoukaku.on('disconnect', (name, playerCount) => {
-    console.warn(`Lavalink node ${name} disconnected. players=${playerCount}`);
+    logger.warn(`Lavalink node ${name} disconnected. players=${playerCount}`);
   });
 };
 
 const shutdown = async (signal) => {
-  console.log(`Received ${signal}. Shutting down Auralyn...`);
+  logger.warn(`Received ${signal}. Shutting down Auralyn...`);
   for (const guildId of [...client.musicPlayer.players.keys()]) {
     await client.musicPlayer.disconnect(guildId).catch(error => {
-      console.error(`Failed to disconnect guild ${guildId}:`, error);
+      logger.error(`Failed to disconnect guild ${guildId}`, error);
     });
   }
   client.destroy();
@@ -97,21 +100,21 @@ const shutdown = async (signal) => {
 };
 
 export async function main() {
-  console.log('Starting Auralyn bot...');
+  logger.info('Starting Auralyn bot...');
   await loadCommands();
   await loadEvents();
   setupShoukakuEvents();
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
-  console.log('Auralyn bot started successfully!');
+  logger.info('Auralyn bot started successfully');
 }
 
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMainModule) {
   main().catch(error => {
-    console.error('Auralyn failed to start:', error);
+    logger.error('Auralyn failed to start', error);
     process.exit(1);
   });
 }

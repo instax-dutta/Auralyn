@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -9,15 +10,24 @@ export default {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply('You need to be in a voice channel to use this command!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before stopping playback.', false)],
+        components: [],
+      });
     }
 
     try {
       await client.musicPlayer.stop(interaction.guildId);
-      return interaction.editReply('Stopped the music and cleared the queue!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Playback Stopped', 'Queue cleared and voice session closed.')],
+        components: [],
+      });
     } catch (error) {
-      console.error('Error in stop command:', error);
-      return interaction.editReply('There was an error while trying to stop the music!');
+      client.logger.error('Error in stop command', error);
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Stop Failed', 'There was an error while trying to stop the music.', false)],
+        components: [],
+      });
     }
   },
 };

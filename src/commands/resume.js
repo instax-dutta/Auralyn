@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -9,15 +10,27 @@ export default {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply('You need to be in a voice channel to use this command!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before resuming playback.', false)],
+        components: [],
+      });
     }
 
     try {
       const resumed = await client.musicPlayer.resume(interaction.guildId);
-      return interaction.editReply(resumed ? 'Resumed the current track!' : 'Nothing is currently paused.');
+      if (!resumed) {
+        return interaction.editReply({
+          embeds: [buildActionFeedback('Resume', 'Nothing is currently paused.', false)],
+          components: [],
+        });
+      }
+      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Playback Resumed');
     } catch (error) {
-      console.error('Error in resume command:', error);
-      return interaction.editReply('There was an error while trying to resume the track!');
+      client.logger.error('Error in resume command', error);
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Resume Failed', 'There was an error while trying to resume the track.', false)],
+        components: [],
+      });
     }
   },
 };

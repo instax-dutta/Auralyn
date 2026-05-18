@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -9,15 +10,27 @@ export default {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply('You need to be in a voice channel to use this command!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before pausing playback.', false)],
+        components: [],
+      });
     }
 
     try {
       const paused = await client.musicPlayer.pause(interaction.guildId);
-      return interaction.editReply(paused ? 'Paused the current track!' : 'Nothing is currently playing.');
+      if (!paused) {
+        return interaction.editReply({
+          embeds: [buildActionFeedback('Pause', 'Nothing is currently playing.', false)],
+          components: [],
+        });
+      }
+      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Playback Paused');
     } catch (error) {
-      console.error('Error in pause command:', error);
-      return interaction.editReply('There was an error while trying to pause the track!');
+      client.logger.error('Error in pause command', error);
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Pause Failed', 'There was an error while trying to pause the track.', false)],
+        components: [],
+      });
     }
   },
 };

@@ -1,6 +1,5 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { AuralynColors } from '../utils/embeds.js';
-import { trackTitle } from '../utils/tracks.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, buildRemovedTrackEmbed, buildQueueReply } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -17,36 +16,26 @@ export default {
     const queue = client.musicPlayer.getQueue(interaction.guildId);
 
     if (queue.length === 0) {
-      return interaction.editReply({ 
-        embeds: [new EmbedBuilder()
-          .setTitle('Remove Track')
-          .setDescription('The queue is empty.')
-          .setColor(AuralynColors.warning)
-          .setTimestamp()
-        ]
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Remove Track', 'The queue is empty.', false)],
+        components: [],
       });
     }
 
     const position = interaction.options.getInteger('position');
     const track = client.musicPlayer.remove(interaction.guildId, position);
     if (!track) {
-      return interaction.editReply({ 
-        embeds: [new EmbedBuilder()
-          .setTitle('Remove Track')
-          .setDescription('Invalid position specified.')
-          .setColor(AuralynColors.error)
-          .setTimestamp()
-        ]
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Remove Track', 'That queue position is invalid.', false)],
+        components: [],
       });
     }
 
-    return interaction.editReply({ 
-      embeds: [new EmbedBuilder()
-        .setTitle('Track Removed')
-        .setDescription(`Removed: **${trackTitle(track)}**`)
-        .setColor(AuralynColors.success)
-        .setTimestamp()
-      ]
+    const reply = buildQueueReply(client, interaction.guildId);
+    reply.embeds.unshift(buildRemovedTrackEmbed(track));
+    return interaction.editReply(reply);
+  },
+};
     });
   },
 };

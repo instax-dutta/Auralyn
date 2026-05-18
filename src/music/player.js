@@ -1,3 +1,5 @@
+import { createSilentLogger } from '../utils/logger.js';
+
 const LOOP_MODE = {
   OFF: 0,
   TRACK: 1,
@@ -7,9 +9,10 @@ const LOOP_MODE = {
 const END_REASONS_THAT_SHOULD_ADVANCE = new Set(['finished', 'loadFailed']);
 
 export class MusicPlayer {
-  constructor(shoukaku) {
+  constructor(shoukaku, logger = createSilentLogger()) {
     this.shoukaku = shoukaku;
     this.players = new Map();
+    this.logger = logger;
   }
 
   getPlayerState(guildId) {
@@ -36,10 +39,10 @@ export class MusicPlayer {
     state.textChannel = textChannel;
     state.voiceChannel = voiceChannel;
     state.queue.push(track);
-    console.log(`Enqueued track for guild ${guildId}: ${track?.info?.title ?? 'unknown track'}`);
+    this.logger.info(`Enqueued track for guild ${guildId}: ${track?.info?.title ?? 'unknown track'}`);
 
     if (!state.isPlaying) {
-      console.log(`Guild ${guildId} is idle, starting playback`);
+      this.logger.info(`Guild ${guildId} is idle, starting playback`);
       await this.playNext(guildId);
     }
 
@@ -57,7 +60,7 @@ export class MusicPlayer {
       throw new Error('Cannot create Lavalink player without a voice channel.');
     }
 
-    console.log(`Joining voice channel ${state.voiceChannel.id} for guild ${guildId}`);
+    this.logger.info(`Joining voice channel ${state.voiceChannel.id} for guild ${guildId}`);
     const player = await this.shoukaku.joinVoiceChannel({
       guildId,
       channelId: state.voiceChannel.id,
@@ -65,7 +68,7 @@ export class MusicPlayer {
       deaf: true,
       mute: false,
     });
-    console.log(`Joined voice channel ${state.voiceChannel.id} for guild ${guildId}`);
+    this.logger.info(`Joined voice channel ${state.voiceChannel.id} for guild ${guildId}`);
 
     const listeners = {
       end: (event) => this.handleTrackEnd(guildId, event),
@@ -88,7 +91,7 @@ export class MusicPlayer {
     const nextTrack = this.getNextTrack(state);
 
     if (!nextTrack) {
-      console.log(`No next track available for guild ${guildId}`);
+      this.logger.info(`No next track available for guild ${guildId}`);
       state.currentTrack = null;
       state.isPlaying = false;
       state.isPaused = false;
@@ -99,11 +102,11 @@ export class MusicPlayer {
     state.isPlaying = true;
     state.isPaused = false;
 
-    console.log(`Preparing to play track for guild ${guildId}: ${nextTrack?.info?.title ?? 'unknown track'}`);
+    this.logger.info(`Preparing to play track for guild ${guildId}: ${nextTrack?.info?.title ?? 'unknown track'}`);
     const player = await this.getOrCreateLavalinkPlayer(guildId);
-    console.log(`Sending playTrack to Lavalink for guild ${guildId}`);
+    this.logger.info(`Sending playTrack to Lavalink for guild ${guildId}`);
     await player.playTrack({ track: { encoded: nextTrack.encoded } });
-    console.log(`playTrack completed for guild ${guildId}`);
+    this.logger.info(`playTrack completed for guild ${guildId}`);
     return nextTrack;
   }
 
@@ -128,12 +131,12 @@ export class MusicPlayer {
   }
 
   async handleTrackProblem(guildId, event) {
-    console.error(`Track problem in guild ${guildId}:`, event);
+    this.logger.error(`Track problem in guild ${guildId}`, event);
     await this.skip(guildId);
   }
 
   async handleConnectionClosed(guildId, event) {
-    console.warn(`Voice connection closed in guild ${guildId}:`, event);
+    this.logger.warn(`Voice connection closed in guild ${guildId}`, event);
     await this.stop(guildId);
   }
 
@@ -162,7 +165,7 @@ export class MusicPlayer {
       try {
         await state.lavalinkPlayer.stopTrack();
       } catch (error) {
-        console.error(`Failed to stop Lavalink player in guild ${guildId}:`, error);
+        this.logger.error(`Failed to stop Lavalink player in guild ${guildId}`, error);
       }
     }
 

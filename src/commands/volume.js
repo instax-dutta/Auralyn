@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -15,17 +16,23 @@ export default {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply('You need to be in a voice channel to use this command!');
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before adjusting volume.', false)],
+        components: [],
+      });
     }
 
     const volume = interaction.options.getInteger('volume');
 
     try {
-      const safeVolume = await client.musicPlayer.setVolume(interaction.guildId, volume);
-      return interaction.editReply(`Set the volume to ${safeVolume}%`);
+      await client.musicPlayer.setVolume(interaction.guildId, volume);
+      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Volume Updated');
     } catch (error) {
-      console.error('Error in volume command:', error);
-      return interaction.editReply('There was an error while trying to set the volume!');
+      client.logger.error('Error in volume command', error);
+      return interaction.editReply({
+        embeds: [buildActionFeedback('Volume Update Failed', 'There was an error while trying to set the volume.', false)],
+        components: [],
+      });
     }
   },
 };
