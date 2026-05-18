@@ -53,7 +53,9 @@ echo "Runtime: Node $(node --version), Java $(java -version 2>&1 | head -n 1)"
 echo "Lavalink: $LAVALINK_HOST:$LAVALINK_PORT"
 
 cd "$LAVALINK_DIR"
-java -Xmx"$LAVALINK_MEMORY" -jar Lavalink.jar &
+java -Xmx"$LAVALINK_MEMORY" -jar Lavalink.jar \
+    --server.address="$LAVALINK_HOST" \
+    --server.port="$LAVALINK_PORT" &
 LAVALINK_PID=$!
 echo "Lavalink started with PID $LAVALINK_PID"
 
