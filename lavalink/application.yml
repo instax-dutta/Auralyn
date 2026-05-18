@@ -6,7 +6,7 @@ lavalink:
   server:
     password: "${LAVALINK_PASSWORD}"
     sources:
-      youtube: true
+      youtube: false
       soundcloud: true
       twitch: true
       bandcamp: true
@@ -22,16 +22,39 @@ lavalink:
     playlistSearchRelevanceFilterLimit: 100
 
   plugins:
-    - name: youtube-source
-      class: dev.lavalink.youtube.YoutubeSourceManager
-      enabled: true
-    - name: lavarsc
-      class: dev.lavalink.LavaSrc.LavaSrcManager
-      enabled: true
-      spotify:
-        client-id: "${SPOTIFY_CLIENT_ID:}"
-        client-secret: "${SPOTIFY_CLIENT_SECRET:}"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.2"
 
   tracking:
     client: lavalink4j
     interval: 10
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+
+  lavasrc:
+    providers:
+      - "ytsearch:\"%ISRC%\""
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: true
+      applemusic: false
+      deezer: false
+      yandexmusic: false
+      vkmusic: false
+      tidal: false
+      qobuz: false
+      ytdlp: false
+      jiosaavn: false
+      flowerytts: false
+      youtube: false
+    spotify:
+      clientId: "${SPOTIFY_CLIENT_ID:}"
+      clientSecret: "${SPOTIFY_CLIENT_SECRET:}"
+      countryCode: "US"
+      playlistLoadLimit: 6
+      albumLoadLimit: 6

@@ -38,7 +38,7 @@ RUN mkdir -p /app/logs /app/data /app/lavalink/logs /app/lavalink/plugins \
 USER nodeuser
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
-  CMD curl --fail --silent http://127.0.0.1:${LAVALINK_PORT:-2333}/v4/info > /dev/null || exit 1
+  CMD curl --fail --silent --header "Authorization: ${LAVALINK_PASSWORD}" http://127.0.0.1:${LAVALINK_PORT:-2333}/v4/info > /dev/null || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["/app/scripts/start.sh"]

@@ -65,7 +65,9 @@ while [ "$i" -le "$LAVALINK_STARTUP_TIMEOUT" ]; do
         exit 1
     fi
 
-    if curl --fail --silent --connect-timeout 2 "http://127.0.0.1:${LAVALINK_PORT}/v4/info" > /dev/null 2>&1; then
+    if curl --fail --silent --connect-timeout 2 \
+        --header "Authorization: ${LAVALINK_PASSWORD}" \
+        "http://127.0.0.1:${LAVALINK_PORT}/v4/info" > /dev/null 2>&1; then
         echo "Lavalink is ready."
         break
     fi
