@@ -106,13 +106,14 @@ export function musicEmbed(description, title = '🎵 Auralyn') {
 
 export function createNowPlayingEmbed({
   track,
+  title = 'Auralyn | Now Playing',
   loopModeLabel,
   volume,
   queueLength,
   requestedBy,
 }) {
   const embed = createEmbed({
-    title: 'Auralyn | Now Playing',
+    title,
     description: trackUri(track) ? `**[${trackTitle(track)}](${trackUri(track)})**` : `**${trackTitle(track)}**`,
     color: AuralynColors.primary,
     timestamp: true,
@@ -190,4 +191,56 @@ export function buildPlayerControls({ guildId, isPaused }) {
         .setStyle(ButtonStyle.Danger),
     ),
   ];
+}
+
+export function buildPlayReply({
+  guildId,
+  isPaused,
+  requestedBy,
+  addedTrack,
+  currentTrack,
+  queueLength,
+  loopModeLabel,
+  volume,
+  startedPlayback,
+}) {
+  const embeds = [];
+
+  if (startedPlayback) {
+    embeds.push(
+      createNowPlayingEmbed({
+        track: currentTrack,
+        title: 'Auralyn | Now Playing',
+        loopModeLabel,
+        volume,
+        queueLength,
+        requestedBy,
+      }),
+    );
+  } else {
+    embeds.push(
+      successEmbed(
+        trackUri(addedTrack)
+          ? `Queued **[${trackTitle(addedTrack)}](${trackUri(addedTrack)})** for this session.`
+          : `Queued **${trackTitle(addedTrack)}** for this session.`,
+        'Auralyn | Added to Queue',
+      ),
+    );
+
+    embeds.push(
+      createNowPlayingEmbed({
+        track: currentTrack,
+        title: 'Auralyn | Now Playing',
+        loopModeLabel,
+        volume,
+        queueLength,
+        requestedBy,
+      }),
+    );
+  }
+
+  return {
+    embeds,
+    components: buildPlayerControls({ guildId, isPaused }),
+  };
 }

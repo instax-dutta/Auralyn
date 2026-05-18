@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
-import { resolveTrack, trackTitle, trackUri } from '../utils/tracks.js';
+import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
+import { resolveTrack } from '../utils/tracks.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -41,13 +41,22 @@ export default {
         });
       }
 
+      const wasIdle = !client.musicPlayer.getPlayerState(interaction.guildId).isPlaying;
       await client.musicPlayer.enqueue({
         guildId: interaction.guildId,
         track,
         textChannel: interaction.channel,
         voiceChannel,
       });
-      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Added to Queue');
+      return interaction.editReply(
+        buildPlayCommandReply({
+          interaction,
+          client,
+          guildId: interaction.guildId,
+          addedTrack: track,
+          startedPlayback: wasIdle,
+        }),
+      );
     } catch (error) {
       client.logger.error('Error in play command', error);
       return interaction.editReply({

@@ -1,4 +1,5 @@
 import {
+  buildPlayReply,
   buildPlayerControls,
   createNowPlayingEmbed,
   createQueueEmbed,
@@ -24,6 +25,7 @@ export async function replyWithPlayerSnapshot(interaction, client, guildId, cont
     embeds: [
       createNowPlayingEmbed({
         track: currentTrack,
+        title: contentTitle,
         loopModeLabel: formatLoopMode(state.loopMode),
         volume: state.volume,
         queueLength: state.queue.length,
@@ -72,4 +74,19 @@ export function buildActionFeedback(action, detail, ok = true) {
 
 export function buildRemovedTrackEmbed(track) {
   return successEmbed(`Removed **${trackTitle(track)}** from the queue.`, 'Auralyn | Queue Updated');
+}
+
+export function buildPlayCommandReply({ interaction, client, guildId, addedTrack, startedPlayback }) {
+  const state = client.musicPlayer.getPlayerState(guildId);
+  return buildPlayReply({
+    guildId,
+    isPaused: state.isPaused,
+    requestedBy: interaction.user?.username ?? 'Unknown',
+    addedTrack,
+    currentTrack: state.currentTrack,
+    queueLength: state.queue.length,
+    loopModeLabel: formatLoopMode(state.loopMode),
+    volume: state.volume,
+    startedPlayback,
+  });
 }

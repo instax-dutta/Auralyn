@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   AuralynColors,
+  buildPlayReply,
   buildPlayerControls,
   createNowPlayingEmbed,
 } from '../src/utils/embeds.js';
@@ -22,6 +23,7 @@ const sampleTrack = {
 test('createNowPlayingEmbed builds a branded now playing embed', () => {
   const embed = createNowPlayingEmbed({
     track: sampleTrack,
+    title: 'Auralyn | Playback Resumed',
     loopModeLabel: 'Queue',
     volume: 72,
     queueLength: 4,
@@ -30,13 +32,39 @@ test('createNowPlayingEmbed builds a branded now playing embed', () => {
 
   const json = embed.toJSON();
   assert.equal(json.color, AuralynColors.primary);
-  assert.equal(json.title, 'Auralyn | Now Playing');
+  assert.equal(json.title, 'Auralyn | Playback Resumed');
   assert.match(json.description, /Midnight Skyline/);
   assert.equal(json.thumbnail.url, 'https://example.com/cover.png');
   assert.deepEqual(
     json.fields.map((field) => field.name),
     ['Artist', 'Duration', 'Volume', 'Loop', 'Up Next', 'Requested By'],
   );
+});
+
+test('buildPlayReply returns queue-specific response when adding behind an active track', () => {
+  const reply = buildPlayReply({
+    guildId: 'guild-1',
+    isPaused: false,
+    requestedBy: 'R4C3R',
+    addedTrack: sampleTrack,
+    currentTrack: {
+      ...sampleTrack,
+      info: {
+        ...sampleTrack.info,
+        title: 'Already Playing',
+      },
+    },
+    queueLength: 3,
+    loopModeLabel: 'Off',
+    volume: 100,
+    startedPlayback: false,
+  });
+
+  assert.equal(reply.embeds.length, 2);
+  assert.equal(reply.embeds[0].toJSON().title, 'Auralyn | Added to Queue');
+  assert.match(reply.embeds[0].toJSON().description, /Midnight Skyline/);
+  assert.equal(reply.embeds[1].toJSON().title, 'Auralyn | Now Playing');
+  assert.equal(reply.components[0].toJSON().components[0].custom_id, 'auralyn:skip:guild-1');
 });
 
 test('buildPlayerControls reflects paused state in button ids and labels', () => {
