@@ -12,7 +12,9 @@ export default {
     }
 
     try {
+      console.log(`Handling /${interaction.commandName} from guild ${interaction.guildId ?? 'dm'} by ${interaction.user?.tag ?? interaction.user?.id ?? 'unknown'}`);
       await command.execute(interaction, client, shoukaku);
+      console.log(`Completed /${interaction.commandName}`);
     } catch (error) {
       console.error(`Error executing /${interaction.commandName}:`, error);
       const reply = {
