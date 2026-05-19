@@ -2,6 +2,9 @@ import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
 import { resolveTrack } from '../utils/tracks.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
+import { infoEmbed } from '../utils/embeds.js';
+
+const SPOTIFY_PLAYLIST_RE = /^https?:\/\/(?:open\.)?spotify\.com\/(playlist|album)\//;
 
 export default {
   data: new SlashCommandBuilder()
@@ -33,6 +36,18 @@ export default {
       });
     }
 
+    const isSpotifyCollection = SPOTIFY_PLAYLIST_RE.test(query.trim());
+
+    if (isSpotifyCollection) {
+      await interaction.editReply({
+        embeds: [infoEmbed(
+          'Fetching tracks from Spotify, please wait a moment \u266A',
+          'Auralyn | Hold Tight',
+        )],
+        components: [],
+      });
+    }
+
     try {
       const settings = await client.musicPlayer.getGuildSettings(interaction.guildId);
       const sourcePriority = settings?.sourcePriority ?? defaultGuildSettings.sourcePriority;
@@ -43,25 +58,37 @@ export default {
         const tracks = playlist.tracks ?? [];
         if (tracks.length === 0) {
           return interaction.editReply({
-            embeds: [buildActionFeedback('Empty Playlist', 'That playlist has no playable tracks.', false)],
+            embeds: [buildActionFeedback('Empty Playlist', 'This playlist does not have any playable tracks.', false)],
             components: [],
           });
         }
 
-        let wasIdle = !client.musicPlayer.getPlayerState(interaction.guildId).isPlaying;
+        let enqueued = 0;
         for (const t of tracks) {
-          await client.musicPlayer.enqueue({
-            guildId: interaction.guildId,
-            track: t,
-            textChannel: interaction.channel,
-            voiceChannel,
+          try {
+            await client.musicPlayer.enqueue({
+              guildId: interaction.guildId,
+              track: t,
+              textChannel: interaction.channel,
+              voiceChannel,
+            });
+            enqueued++;
+          } catch (enqueueError) {
+            client.logger.error(`Failed to enqueue track from playlist: ${t?.info?.title}`, enqueueError);
+          }
+        }
+
+        if (enqueued === 0) {
+          return interaction.editReply({
+            embeds: [buildActionFeedback('Playlist Failed', 'Could not enqueue any tracks from this playlist.', false)],
+            components: [],
           });
         }
 
         return interaction.editReply({
           embeds: [buildActionFeedback(
             'Playlist Added',
-            `Enqueued **${tracks.length} tracks** from **${playlist.info?.name ?? 'playlist'}**.`,
+            `Enqueued **${enqueued} track${enqueued === 1 ? '' : 's'}** from **${playlist.info?.name ?? 'playlist'}**.`,
           )],
           components: [],
         });
@@ -92,8 +119,15 @@ export default {
       );
     } catch (error) {
       client.logger.error('Error in play command', error);
+
+      const message = error.message?.includes('No connected Lavalink node')
+        ? 'The music server is not connected. Please try again in a moment.'
+        : error.message?.includes('Unsupported Lavalink load type')
+          ? 'This type of content is not supported right now.'
+          : 'There was an error while trying to play that.';
+
       return interaction.editReply({
-        embeds: [buildActionFeedback('Playback Failed', 'There was an error while trying to play that song.', false)],
+        embeds: [buildActionFeedback('Playback Failed', message, false)],
         components: [],
       });
     }
