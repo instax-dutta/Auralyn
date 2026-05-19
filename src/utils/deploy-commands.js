@@ -116,13 +116,20 @@ export async function deployCommandsForGuild(config, guildId) {
   logger.info(`Registered ${data.length} guild commands for ${guildId}.`);
 }
 
-const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isMainModule = process.argv[1]
+  && (import.meta.url === pathToFileURL(process.argv[1]).href
+    || process.argv[1].endsWith('deploy-commands.js'));
 
 if (isMainModule) {
   const shouldReset = process.argv.includes('--reset');
-  deployCommands(undefined, { reset: shouldReset }).catch(error => {
-    const logger = createLogger({ level: process.env.LOG_LEVEL ?? 'info', scope: 'deploy' });
-    logger.error('Failed to deploy commands', error);
-    process.exit(1);
-  });
+  deployCommands(undefined, { reset: shouldReset })
+    .then(() => {
+      process.stdout.write('[deploy-commands] Done — exiting.\n');
+      process.exit(0);
+    })
+    .catch(error => {
+      const logger = createLogger({ level: process.env.LOG_LEVEL ?? 'info', scope: 'deploy' });
+      logger.error('Failed to deploy commands', error);
+      process.exit(1);
+    });
 }
