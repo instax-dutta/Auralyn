@@ -37,7 +37,36 @@ export default {
       const settings = await client.musicPlayer.getGuildSettings(interaction.guildId);
       const sourcePriority = settings?.sourcePriority ?? defaultGuildSettings.sourcePriority;
 
-      const { track } = await resolveTrack(shoukaku, query, { sourcePriority });
+      const { track, playlist } = await resolveTrack(shoukaku, query, { sourcePriority });
+
+      if (playlist) {
+        const tracks = playlist.tracks ?? [];
+        if (tracks.length === 0) {
+          return interaction.editReply({
+            embeds: [buildActionFeedback('Empty Playlist', 'That playlist has no playable tracks.', false)],
+            components: [],
+          });
+        }
+
+        let wasIdle = !client.musicPlayer.getPlayerState(interaction.guildId).isPlaying;
+        for (const t of tracks) {
+          await client.musicPlayer.enqueue({
+            guildId: interaction.guildId,
+            track: t,
+            textChannel: interaction.channel,
+            voiceChannel,
+          });
+        }
+
+        return interaction.editReply({
+          embeds: [buildActionFeedback(
+            'Playlist Added',
+            `Enqueued **${tracks.length} tracks** from **${playlist.info?.name ?? 'playlist'}**.`,
+          )],
+          components: [],
+        });
+      }
+
       if (!track) {
         return interaction.editReply({
           embeds: [buildActionFeedback('No Results', 'Auralyn could not find a playable result for that search.', false)],
