@@ -134,3 +134,63 @@ test('remove uses one-based queue positions', async () => {
   assert.equal(removed.info.title, 'Track two');
   assert.equal(musicPlayer.getQueue('guild').length, 0);
 });
+
+test('enqueue applies default guild volume and preserves requester metadata', async () => {
+  const lavalinkPlayer = new FakeLavalinkPlayer();
+  const settingsStore = {
+    async get() {
+      return {
+        defaultVolume: 55,
+      };
+    },
+  };
+  const musicPlayer = new MusicPlayer(new FakeShoukaku(lavalinkPlayer), undefined, { settingsStore });
+
+  await musicPlayer.enqueue({
+    guildId: 'guild',
+    track: {
+      ...track('one'),
+      requestedByUserId: 'user-1',
+      requestedByName: 'R4C3R',
+    },
+    textChannel: { id: 'text-1' },
+    voiceChannel: { id: 'voice', guild: { shardId: 0 } },
+  });
+
+  const state = musicPlayer.getPlayerState('guild');
+  assert.equal(state.currentTrack.requestedByUserId, 'user-1');
+  assert.equal(state.currentTrack.requestedByName, 'R4C3R');
+  assert.equal(state.volume, 55);
+  assert.equal(lavalinkPlayer.volume, 55);
+});
+
+test('enqueue and stop persist and clear snapshots when session store is configured', async () => {
+  const sessionWrites = [];
+  const sessionDeletes = [];
+  const sessionStore = {
+    async save(guildId, snapshot) {
+      sessionWrites.push({ guildId, snapshot });
+    },
+    async delete(guildId) {
+      sessionDeletes.push(guildId);
+    },
+  };
+  const musicPlayer = new MusicPlayer(new FakeShoukaku(), undefined, { sessionStore });
+
+  await musicPlayer.enqueue({
+    guildId: 'guild',
+    track: {
+      ...track('one'),
+      requestedByUserId: 'user-1',
+    },
+    textChannel: { id: 'text-1' },
+    voiceChannel: { id: 'voice', guild: { shardId: 0 } },
+  });
+
+  assert.equal(sessionWrites.length >= 1, true);
+  assert.equal(sessionWrites.at(-1).guildId, 'guild');
+  assert.equal(sessionWrites.at(-1).snapshot.currentTrack.requestedByUserId, 'user-1');
+
+  await musicPlayer.stop('guild');
+  assert.deepEqual(sessionDeletes, ['guild']);
+});

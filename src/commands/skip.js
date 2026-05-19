@@ -17,6 +17,33 @@ export default {
     }
 
     try {
+      const settings = await client.musicPlayer.getGuildSettings(interaction.guildId);
+
+      if (settings.voteSkipEnabled && !interaction.member.permissions.has('ManageMessages')) {
+        const channel = interaction.member.voice.channel;
+        const listeners = channel.members.filter(m => !m.user.bot && m.id !== client.user.id);
+        const totalListeners = listeners.size;
+
+        if (totalListeners > 1) {
+          const voteSet = client.musicPlayer.getVoteSkipSet(interaction.guildId);
+          voteSet.add(interaction.user.id);
+
+          const currentVotes = voteSet.size;
+          const needed = Math.max(1, Math.ceil((totalListeners * settings.voteSkipThreshold) / 100));
+
+          if (currentVotes < needed) {
+            return interaction.editReply({
+              embeds: [buildActionFeedback(
+                'Vote Skip',
+                `Vote registered (${currentVotes}/${needed}). ${needed - currentVotes} more vote(s) needed to skip.`,
+                false,
+              )],
+              components: [],
+            });
+          }
+        }
+      }
+
       const nextTrack = await client.musicPlayer.skip(interaction.guildId);
       if (!nextTrack) {
         return interaction.editReply({

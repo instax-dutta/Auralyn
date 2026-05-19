@@ -6,6 +6,8 @@ const LOOP_QUEUE = 2;
 
 export { LOOP_OFF, LOOP_TRACK, LOOP_QUEUE };
 
+const MAX_HISTORY = 10;
+
 export class QueueManager {
   constructor(logger = createSilentLogger()) {
     this.logger = logger;
@@ -16,6 +18,7 @@ export class QueueManager {
     if (!this.players.has(guildId)) {
       this.players.set(guildId, {
         queue: [],
+        history: [],
         currentTrack: null,
         isPlaying: false,
         isPaused: false,
@@ -34,6 +37,13 @@ export class QueueManager {
     const state = this.getState(guildId);
     state.queue.push(track);
     this.logger.info(`Enqueued track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
+    return state;
+  }
+
+  enqueueFront(guildId, track) {
+    const state = this.getState(guildId);
+    state.queue.unshift(track);
+    this.logger.info(`Prepended track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
     return state;
   }
 
@@ -65,6 +75,18 @@ export class QueueManager {
       return null;
     }
     return state.queue.splice(index, 1)[0] ?? null;
+  }
+
+  removeBefore(guildId, position) {
+    const state = this.getState(guildId);
+    const index = position - 1;
+    if (index < 0 || index >= state.queue.length) return;
+    state.queue.splice(0, index);
+  }
+
+  clearQueue(guildId) {
+    const state = this.getState(guildId);
+    state.queue = [];
   }
 
   setLoopMode(guildId, mode) {
@@ -156,6 +178,24 @@ export class QueueManager {
     if (state.loopMode === LOOP_QUEUE && state.currentTrack) {
       state.queue.push(state.currentTrack);
     }
+  }
+
+  pushHistory(guildId) {
+    const state = this.getState(guildId);
+    if (!state.currentTrack) return;
+    state.history.push(state.currentTrack);
+    if (state.history.length > MAX_HISTORY) {
+      state.history.shift();
+    }
+  }
+
+  popHistory(guildId) {
+    const state = this.getState(guildId);
+    return state.history.pop() ?? null;
+  }
+
+  getHistory(guildId) {
+    return this.getState(guildId).history;
   }
 
   cleanup(guildId) {

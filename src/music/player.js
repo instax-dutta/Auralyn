@@ -18,6 +18,7 @@ export class MusicPlayer {
     this.trackResolver = trackResolver;
     this.telemetry = telemetry;
     this.queueManager = new QueueManager(logger.child('queue'));
+    this.voteSkipSets = new Map();
   }
 
   get players() {
@@ -58,6 +59,34 @@ export class MusicPlayer {
 
   async play(guildId, track, textChannel, voiceChannel) {
     return this.enqueue({ guildId, track, textChannel, voiceChannel });
+  }
+
+  async enqueueFront({ guildId, track, textChannel, voiceChannel }) {
+    const state = this.queueManager.getState(guildId);
+    state.textChannel = textChannel;
+    state.voiceChannel = voiceChannel;
+
+    const nextTrack = {
+      ...track,
+      requestedByUserId: track.requestedByUserId ?? null,
+      requestedByName: track.requestedByName ?? null,
+    };
+
+    this.queueManager.enqueueFront(guildId, nextTrack);
+
+    const settings = await this.getGuildSettings(guildId);
+    if (state.volume !== settings.defaultVolume) {
+      await this.setVolume(guildId, settings.defaultVolume);
+    }
+
+    await this.persistGuildState(guildId);
+
+    if (!state.isPlaying) {
+      this.logger.info(`Guild ${guildId} is idle, starting playback`);
+      await this.playNext(guildId);
+    }
+
+    return state;
   }
 
   async getOrCreateLavalinkPlayer(guildId) {
@@ -106,10 +135,12 @@ export class MusicPlayer {
       this.queueManager.setCurrentTrack(guildId, null);
       state.isPlaying = false;
       state.isPaused = false;
+      this.clearVoteSkipSet(guildId);
       return null;
     }
 
     this.queueManager.setCurrentTrack(guildId, nextTrack);
+    this.clearVoteSkipSet(guildId);
 
     this.logger.info(`Preparing to play track for guild ${guildId}: ${nextTrack?.info?.title ?? 'unknown'}`);
     const player = await this.getOrCreateLavalinkPlayer(guildId);
@@ -126,8 +157,69 @@ export class MusicPlayer {
     if (!state.isPlaying) return;
     if (!END_REASONS_THAT_SHOULD_ADVANCE.has(event.reason ?? 'finished')) return;
 
+    this.queueManager.pushHistory(guildId);
     this.queueManager.onTrackEnd(guildId);
-    await this.playNext(guildId);
+
+    const nextTrack = this.queueManager.getNextTrack(state);
+
+    if (nextTrack) {
+      this.queueManager.setCurrentTrack(guildId, nextTrack);
+      this.clearVoteSkipSet(guildId);
+      const player = await this.getOrCreateLavalinkPlayer(guildId);
+      await player.playTrack({ track: { encoded: nextTrack.encoded } });
+      this.telemetry?.trackTrackPlayed();
+      await this.persistGuildState(guildId);
+      return;
+    }
+
+    const autoplayTrack = await this.tryAutoplay(guildId);
+    if (autoplayTrack) {
+      this.queueManager.setCurrentTrack(guildId, autoplayTrack);
+      this.clearVoteSkipSet(guildId);
+      const player = await this.getOrCreateLavalinkPlayer(guildId);
+      await player.playTrack({ track: { encoded: autoplayTrack.encoded } });
+      this.telemetry?.trackTrackPlayed();
+      await this.persistGuildState(guildId);
+      return;
+    }
+
+    this.queueManager.setCurrentTrack(guildId, null);
+    state.isPlaying = false;
+    state.isPaused = false;
+    this.clearVoteSkipSet(guildId);
+  }
+
+  async tryAutoplay(guildId) {
+    const state = this.queueManager.getState(guildId);
+    const settings = await this.getGuildSettings(guildId);
+    if (!settings.autoplay) return null;
+
+    const history = this.queueManager.getHistory(guildId);
+    const seedTrack = history[history.length - 1];
+    if (!seedTrack?.info?.title) return null;
+
+    const source = settings.sourcePriority?.[0] ?? 'youtube';
+    const artist = seedTrack.info.author ?? '';
+    const title = seedTrack.info.title;
+
+    const query = `${artist} ${title}`.trim();
+    if (!query) return null;
+
+    if (!this.trackResolver?.resolve) return null;
+
+    try {
+      const result = await this.trackResolver.resolve(this.shoukaku, query, { sourcePriority: [source] });
+      if (!result?.track) return null;
+
+      return {
+        ...result.track,
+        requestedByUserId: null,
+        requestedByName: 'autoplay',
+      };
+    } catch (error) {
+      this.logger.error(`Autoplay search failed for guild ${guildId}`, error);
+      return null;
+    }
   }
 
   async handleTrackProblem(guildId, event) {
@@ -144,6 +236,8 @@ export class MusicPlayer {
     const state = this.queueManager.getState(guildId);
     if (!state.currentTrack && state.queue.length === 0) return null;
 
+    this.queueManager.pushHistory(guildId);
+
     const player = state.lavalinkPlayer;
     state.currentTrack = null;
 
@@ -151,6 +245,7 @@ export class MusicPlayer {
       await player.stopTrack();
     }
 
+    this.clearVoteSkipSet(guildId);
     await this.persistGuildState(guildId);
     return this.playNext(guildId);
   }
@@ -170,6 +265,7 @@ export class MusicPlayer {
       }
     }
 
+    this.clearVoteSkipSet(guildId);
     await this.disconnect(guildId);
   }
 
@@ -177,6 +273,7 @@ export class MusicPlayer {
     this.cleanupGuild(guildId);
     await this.shoukaku.leaveVoiceChannel(guildId);
     this.queueManager.cleanup(guildId);
+    this.voteSkipSets.delete(guildId);
     if (this.sessionStore?.delete) {
       await this.sessionStore.delete(guildId);
     }
@@ -273,5 +370,61 @@ export class MusicPlayer {
       voiceChannelId: state.voiceChannel?.id ?? null,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  clearVoteSkipSet(guildId) {
+    this.voteSkipSets.delete(guildId);
+  }
+
+  getVoteSkipSet(guildId) {
+    if (!this.voteSkipSets.has(guildId)) {
+      this.voteSkipSets.set(guildId, new Set());
+    }
+    return this.voteSkipSets.get(guildId);
+  }
+
+  async previous(guildId) {
+    const state = this.queueManager.getState(guildId);
+    const prevTrack = this.queueManager.popHistory(guildId);
+    if (!prevTrack) return null;
+
+    if (state.currentTrack) {
+      state.queue.unshift(state.currentTrack);
+    }
+
+    if (state.lavalinkPlayer) {
+      await state.lavalinkPlayer.stopTrack();
+    }
+
+    this.queueManager.setCurrentTrack(guildId, prevTrack);
+    this.clearVoteSkipSet(guildId);
+
+    const player = await this.getOrCreateLavalinkPlayer(guildId);
+    await player.playTrack({ track: { encoded: prevTrack.encoded } });
+    this.telemetry?.trackTrackPlayed();
+    await this.persistGuildState(guildId);
+    return prevTrack;
+  }
+
+  async setAutoplay(guildId, enabled) {
+    if (this.settingsStore?.update) {
+      return this.settingsStore.update(guildId, { autoplay: enabled });
+    }
+    return null;
+  }
+
+  async set247(guildId, enabled) {
+    if (this.settingsStore?.update) {
+      return this.settingsStore.update(guildId, { twentyFourSeven: enabled });
+    }
+    return null;
+  }
+
+  getState(guildId) {
+    return this.queueManager.getState(guildId);
+  }
+
+  getQueueManager() {
+    return this.queueManager;
   }
 }

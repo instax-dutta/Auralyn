@@ -5,7 +5,8 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from './config.js';
-import { MusicPlayer } from './music/player.js';
+import { MusicPlayer, createTrackResolver } from './music/index.js';
+import { GuildSettingsStore } from './utils/guild-settings.js';
 import { createLogger } from './utils/logger.js';
 import { deployCommands, deployCommandsForGuild } from './utils/deploy-commands.js';
 import { RateLimiter } from './utils/rate-limiter.js';
@@ -45,7 +46,13 @@ const shoukaku = new Shoukaku(
 );
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
-client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry });
+client.settingsStore = new GuildSettingsStore();
+const trackResolver = createTrackResolver();
+client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), {
+  settingsStore: client.settingsStore,
+  trackResolver,
+  telemetry: client.telemetry,
+});
 
 const loadCommands = async () => {
   const commandsPath = path.join(__dirname, 'commands');
@@ -100,6 +107,9 @@ const shutdown = async (signal) => {
       logger.error(`Failed to disconnect guild ${guildId}`, error);
     });
   }
+  await client.settingsStore?.persist().catch(error => {
+    logger.error('Failed to persist guild settings', error);
+  });
   client.destroy();
   process.exit(0);
 };

@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 export const DEFAULT_SOURCE_PRIORITY = ['direct', 'spotify', 'youtube'];
@@ -11,6 +12,9 @@ export const defaultGuildSettings = Object.freeze({
   djRoleIds: [],
   sourcePriority: DEFAULT_SOURCE_PRIORITY,
   controlMode: 'public',
+  twentyFourSeven: false,
+  voteSkipEnabled: false,
+  voteSkipThreshold: 50,
 });
 
 function sanitizeNumber(value, fallback, { min, max }) {
@@ -31,13 +35,36 @@ function sanitizeGuildSettings(input = {}) {
       ? input.sourcePriority.filter(s => VALID_SOURCES.has(s))
       : defaultGuildSettings.sourcePriority,
     controlMode: input.controlMode === 'requester_or_dj' ? 'requester_or_dj' : 'public',
+    twentyFourSeven: input.twentyFourSeven === true,
+    voteSkipEnabled: input.voteSkipEnabled === true,
+    voteSkipThreshold: sanitizeNumber(input.voteSkipThreshold, defaultGuildSettings.voteSkipThreshold, { min: 1, max: 100 }),
   };
 }
 
+const DEFAULT_FILE_PATH = '/app/data/guild-settings.json';
+
 export class GuildSettingsStore {
-  constructor({ filePath }) {
-    this.filePath = filePath;
+  constructor({ filePath } = {}) {
+    this.filePath = filePath || DEFAULT_FILE_PATH;
     this.cache = null;
+    this._loadSync();
+  }
+
+  _loadSync() {
+    if (!existsSync(this.filePath)) {
+      this.cache = {};
+      return;
+    }
+
+    try {
+      const raw = readFileSync(this.filePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      this.cache = Object.fromEntries(
+        Object.entries(parsed).map(([guildId, settings]) => [guildId, sanitizeGuildSettings(settings)]),
+      );
+    } catch (error) {
+      this.cache = {};
+    }
   }
 
   async ensureLoaded() {

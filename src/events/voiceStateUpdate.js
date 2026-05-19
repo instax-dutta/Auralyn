@@ -34,6 +34,9 @@ export default {
 
       const members = channel.members.filter(member => !member.user.bot && member.id !== client.user.id);
       if (members.size === 0) {
+        const settings = await client.musicPlayer.getGuildSettings(guild.id);
+        if (settings.twentyFourSeven) return;
+
         if (!client.aloneTimeouts) client.aloneTimeouts = new Map();
         const existingTimeout = client.aloneTimeouts.get(guild.id);
         if (existingTimeout) clearTimeout(existingTimeout);
