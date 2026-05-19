@@ -34,11 +34,17 @@ export function getCommandDeploymentTargets(config) {
     { scope: 'global', clientId: config.clientId },
   ];
 
-  if (config.guildId) {
+  const guildIds = new Set();
+  if (config.guildId) guildIds.add(config.guildId);
+  for (const guildId of config.guildIds ?? []) {
+    if (guildId) guildIds.add(guildId);
+  }
+
+  for (const guildId of guildIds) {
     targets.push({
       scope: 'guild',
       clientId: config.clientId,
-      guildId: config.guildId,
+      guildId,
     });
   }
 
@@ -69,6 +75,17 @@ export async function deployCommands(config = loadConfig()) {
     );
     logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
   }
+}
+
+export async function deployCommandsForGuild(config, guildId) {
+  const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
+  const commands = await loadCommandPayloads();
+  const rest = new REST({ version: '10' }).setToken(config.discordToken);
+  const data = await rest.put(
+    Routes.applicationGuildCommands(config.clientId, guildId),
+    { body: commands },
+  );
+  logger.info(`Registered ${data.length} guild commands for ${guildId}.`);
 }
 
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

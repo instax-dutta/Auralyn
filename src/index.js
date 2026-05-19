@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
 import { createLogger } from './utils/logger.js';
-import { deployCommands } from './utils/deploy-commands.js';
+import { deployCommands, deployCommandsForGuild } from './utils/deploy-commands.js';
 
 dotenv.config();
 
@@ -108,9 +108,21 @@ export async function main() {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
-  await deployCommands(config);
+  await deployCommands({
+    ...config,
+    guildIds: [...client.guilds.cache.keys()],
+  });
   logger.info('Auralyn bot started successfully');
 }
+
+client.on('guildCreate', async (guild) => {
+  try {
+    await deployCommandsForGuild(config, guild.id);
+    logger.info(`Guild command sync complete for joined guild ${guild.id}`);
+  } catch (error) {
+    logger.error(`Failed to sync commands for joined guild ${guild.id}`, error);
+  }
+});
 
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
