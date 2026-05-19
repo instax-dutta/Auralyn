@@ -1,8 +1,22 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { createEmbed, AuralynColors } from '../utils/embeds.js';
 
-const INVITE_PERMISSIONS = 3145728;
+const INVITE_PERMISSIONS = 2150755648;
 const SCOPES = ['bot', 'applications.commands'];
+
+const PERMISSION_LABELS = [
+  'View Channels',
+  'Send Messages',
+  'Manage Messages',
+  'Embed Links',
+  'Attach Files',
+  'Read Message History',
+  'Add Reactions',
+  'Use Application Commands',
+  'Connect',
+  'Speak',
+  'Priority Speaker',
+];
 
 export default {
   data: new SlashCommandBuilder()
@@ -36,13 +50,13 @@ export default {
 
     const embed = createEmbed({
       title: 'Auralyn | Invite',
-      description: 'Add Auralyn to your server with minimal permissions — just connect and speak in voice channels.',
+      description: 'Add Auralyn to your server — all the permissions it needs, nothing it doesn\'t.',
       color: AuralynColors.primary,
       timestamp: true,
       footer: { text: 'Auralyn music bot' },
       fields: [
-        { name: 'Permissions', value: 'Connect to voice channels\nSpeak in voice channels', inline: true },
-        { name: 'Scopes', value: 'Bot\nSlash Commands', inline: true },
+        { name: 'Permissions Included', value: PERMISSION_LABELS.map(p => `• ${p}`).join('\n'), inline: false },
+        { name: 'Scopes', value: 'Bot\nSlash Commands', inline: false },
       ],
     });
 
