@@ -124,10 +124,7 @@ export async function main() {
   await client.login(config.discordToken);
 
   if (config.autoSyncGlobalCommands) {
-    await deployCommands({
-      ...config,
-      guildIds: [...client.guilds.cache.keys()],
-    });
+    await deployCommands(config);
   }
 
   logger.info('Auralyn bot started successfully');

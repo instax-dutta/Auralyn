@@ -30,25 +30,23 @@ export async function loadCommandPayloads() {
 }
 
 export function getCommandDeploymentTargets(config) {
-  const targets = [
-    { scope: 'global', clientId: config.clientId },
-  ];
-
   const guildIds = new Set();
   if (config.guildId) guildIds.add(config.guildId);
   for (const guildId of config.guildIds ?? []) {
     if (guildId) guildIds.add(guildId);
   }
 
-  for (const guildId of guildIds) {
-    targets.push({
+  if (guildIds.size > 0) {
+    return [...guildIds].map(guildId => ({
       scope: 'guild',
       clientId: config.clientId,
       guildId,
-    });
+    }));
   }
 
-  return targets;
+  return [
+    { scope: 'global', clientId: config.clientId },
+  ];
 }
 
 export async function deployCommands(config = loadConfig()) {
@@ -57,7 +55,8 @@ export async function deployCommands(config = loadConfig()) {
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
   const targets = getCommandDeploymentTargets(config);
 
-  logger.info(`Refreshing ${commands.length} application commands.`);
+  const names = commands.map(c => c.name).sort();
+  logger.info(`Refreshing ${commands.length} application commands: ${names.join(', ')}`);
 
   for (const target of targets) {
     if (target.scope === 'global') {
