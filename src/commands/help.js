@@ -27,6 +27,7 @@ const CATEGORIES = [
     name: 'Utilities',
     commands: [
       { name: '/ping', description: 'Check bot latency and WebSocket health' },
+      { name: '/invite', description: 'Get an invite link to add Auralyn to your server' },
       { name: '/help', description: 'Show this help message' },
     ],
   },

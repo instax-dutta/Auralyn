@@ -88,6 +88,7 @@ docker-compose up -d
 | `/shuffle` | Shuffle the queue |
 | `/remove` | Remove a track from the queue by position |
 | `/ping` | Check bot and WebSocket latency |
+| `/invite` | Get a permission-minimal invite link to add Auralyn to your server |
 | `/help` | Show categorized command listing |
 
 ## Pelican/Pterodactyl Panel Deployment
@@ -124,6 +125,7 @@ auralyn/
 │   ├── config.js              # Env-based configuration + feature flags
 │   ├── commands/              # Slash command handlers
 │   │   ├── help.js
+│   │   ├── invite.js
 │   │   ├── loop.js
 │   │   ├── nowplaying.js
 │   │   ├── pause.js
