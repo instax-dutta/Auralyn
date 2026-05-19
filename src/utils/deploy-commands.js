@@ -119,7 +119,8 @@ export async function deployCommandsForGuild(config, guildId) {
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMainModule) {
-  deployCommands().catch(error => {
+  const shouldReset = process.argv.includes('--reset');
+  deployCommands(undefined, { reset: shouldReset }).catch(error => {
     const logger = createLogger({ level: process.env.LOG_LEVEL ?? 'info', scope: 'deploy' });
     logger.error('Failed to deploy commands', error);
     process.exit(1);
