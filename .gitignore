@@ -3,3 +3,11 @@ node_modules/
 .env.local
 *.log
 .DS_Store
+
+# AI session logs (never commit)
+2026*.md
+
+# Stale docs (superseded by technical-foundation.md)
+IMPLEMENTATION-PLAN.md
+BUILD-SUMMARY.md
+TECH-DOC.md
