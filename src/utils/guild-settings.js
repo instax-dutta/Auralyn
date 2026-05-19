@@ -41,7 +41,7 @@ function sanitizeGuildSettings(input = {}) {
   };
 }
 
-const DEFAULT_FILE_PATH = '/app/data/guild-settings.json';
+const DEFAULT_FILE_PATH = '/app/guild-settings.json';
 
 export class GuildSettingsStore {
   constructor({ filePath } = {}) {
@@ -85,8 +85,12 @@ export class GuildSettingsStore {
   }
 
   async persist() {
-    await mkdir(path.dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, JSON.stringify(this.cache, null, 2));
+    try {
+      await mkdir(path.dirname(this.filePath), { recursive: true });
+      await writeFile(this.filePath, JSON.stringify(this.cache, null, 2));
+    } catch (error) {
+      console.warn(`[guild-settings] Failed to persist: ${error.message}`);
+    }
   }
 
   async get(guildId) {

@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { Connectors, Shoukaku } from 'shoukaku';
-import fs from 'fs';
+import fs, { existsSync, unlinkSync } from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -124,8 +124,14 @@ export async function main() {
   await client.login(config.discordToken);
 
   if (config.autoSyncGlobalCommands) {
-    const reset = config.forceResetCommands || process.argv.includes('--reset-commands');
+    const markerFile = '/app/.reset-commands';
+    const reset = config.forceResetCommands
+      || process.argv.includes('--reset-commands')
+      || existsSync(markerFile);
     await deployCommands(config, { reset });
+    if (reset && existsSync(markerFile)) {
+      try { unlinkSync(markerFile); } catch { /* ignore */ }
+    }
   }
 
   logger.info('Auralyn bot started successfully');
