@@ -119,6 +119,7 @@ async function tryResolveFromSource(shoukaku, query, sourceName) {
   if (sourceName === 'direct') {
     if (!isDirectUrl(query)) return { track: null, playlist: null, sourceName: null };
     const result = await node.rest.resolve(query.trim());
+    if (result?.loadType === LoadType.ERROR) return { track: null, playlist: null, sourceName: null };
     const shaped = shapeResolvedResult(result);
     return { ...shaped, sourceName: 'direct' };
   }
@@ -128,6 +129,10 @@ async function tryResolveFromSource(shoukaku, query, sourceName) {
 
   const prefixedQuery = `${prefix}:${query.trim()}`;
   const result = await node.rest.resolve(prefixedQuery);
+
+  if (result?.loadType === LoadType.ERROR) {
+    return { track: null, playlist: null, sourceName: null };
+  }
 
   if (result?.loadType === LoadType.SEARCH) {
     const bestTrack = pickBestSearchResult(result.data, query);
