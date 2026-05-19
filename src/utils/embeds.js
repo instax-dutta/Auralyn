@@ -11,6 +11,7 @@ import {
   trackLength,
   trackTitle,
   trackUri,
+  trackSourceInfo,
 } from './tracks.js';
 
 export const AuralynColors = {
@@ -112,6 +113,20 @@ export function createNowPlayingEmbed({
   queueLength,
   requestedBy,
 }) {
+  const fields = [
+    { name: 'Artist', value: trackAuthor(track), inline: true },
+    { name: 'Duration', value: trackLength(track), inline: true },
+    { name: 'Volume', value: `${volume}%`, inline: true },
+    { name: 'Loop', value: loopModeLabel, inline: true },
+    { name: 'Up Next', value: queueLength > 0 ? `${queueLength} queued` : 'Queue is empty', inline: true },
+    { name: 'Requested By', value: requestedBy ?? 'Unknown', inline: true },
+  ];
+
+  const sourceInfo = trackSourceInfo(track);
+  if (sourceInfo) {
+    fields.splice(1, 0, { name: 'Source', value: sourceInfo.source, inline: true });
+  }
+
   const embed = createEmbed({
     title,
     description: trackUri(track) ? `**[${trackTitle(track)}](${trackUri(track)})**` : `**${trackTitle(track)}**`,
@@ -120,14 +135,7 @@ export function createNowPlayingEmbed({
     footer: {
       text: 'Auralyn playback session',
     },
-  }).addFields(
-    { name: 'Artist', value: trackAuthor(track), inline: true },
-    { name: 'Duration', value: trackLength(track), inline: true },
-    { name: 'Volume', value: `${volume}%`, inline: true },
-    { name: 'Loop', value: loopModeLabel, inline: true },
-    { name: 'Up Next', value: queueLength > 0 ? `${queueLength} queued` : 'Queue is empty', inline: true },
-    { name: 'Requested By', value: requestedBy ?? 'Unknown', inline: true },
-  );
+  }).addFields(...fields);
 
   const artwork = trackArtwork(track);
   if (artwork) embed.setThumbnail(artwork);
@@ -191,6 +199,28 @@ export function buildPlayerControls({ guildId, isPaused }) {
         .setStyle(ButtonStyle.Danger),
     ),
   ];
+}
+
+export function buildPingEmbed({ latency, wsLatency }) {
+  let statusColor = AuralynColors.success;
+  if (latency > 200) {
+    statusColor = AuralynColors.warning;
+  }
+  if (latency > 500) {
+    statusColor = AuralynColors.error;
+  }
+
+  return createEmbed({
+    title: 'Auralyn | Status',
+    description: 'Operational and ready for playback.',
+    color: statusColor,
+    timestamp: true,
+    fields: [
+      { name: 'API Latency', value: `\`${latency}ms\``, inline: true },
+      { name: 'WebSocket', value: `\`${wsLatency}ms\``, inline: true },
+      { name: 'Bot', value: 'Online', inline: true },
+    ],
+  });
 }
 
 export function buildPlayReply({

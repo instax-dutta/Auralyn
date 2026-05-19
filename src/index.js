@@ -8,6 +8,8 @@ import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
 import { createLogger } from './utils/logger.js';
 import { deployCommands, deployCommandsForGuild } from './utils/deploy-commands.js';
+import { RateLimiter } from './utils/rate-limiter.js';
+import { Telemetry } from './utils/telemetry.js';
 
 dotenv.config();
 
@@ -42,7 +44,8 @@ const shoukaku = new Shoukaku(
   },
 );
 
-client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'));
+client.telemetry = new Telemetry(logger.child('telemetry'));
+client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry });
 
 const loadCommands = async () => {
   const commandsPath = path.join(__dirname, 'commands');
@@ -76,6 +79,7 @@ const loadEvents = async () => {
 
 const setupShoukakuEvents = () => {
   shoukaku.on('ready', (name, resumed) => {
+    if (resumed) client.telemetry?.trackReconnect();
     logger.info(`Lavalink node ${name} ready${resumed ? ' (resumed)' : ''}`);
   });
   shoukaku.on('error', (name, error) => {
@@ -108,16 +112,24 @@ export async function main() {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
-  await deployCommands({
-    ...config,
-    guildIds: [...client.guilds.cache.keys()],
-  });
+
+  if (config.autoSyncGlobalCommands) {
+    await deployCommands({
+      ...config,
+      guildIds: [...client.guilds.cache.keys()],
+    });
+  }
+
   logger.info('Auralyn bot started successfully');
 }
 
+const guildSyncLimiter = new RateLimiter({ intervalMs: 2000, maxBurst: 5 });
+
 client.on('guildCreate', async (guild) => {
+  if (!config.autoSyncGuildCommands) return;
+
   try {
-    await deployCommandsForGuild(config, guild.id);
+    await guildSyncLimiter.enqueue(() => deployCommandsForGuild(config, guild.id));
     logger.info(`Guild command sync complete for joined guild ${guild.id}`);
   } catch (error) {
     logger.error(`Failed to sync commands for joined guild ${guild.id}`, error);

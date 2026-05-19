@@ -1,3 +1,8 @@
+logging:
+  level:
+    lavalink: WARN
+    org.springframework: WARN
+
 server:
   address: "127.0.0.1"
   port: 2333
@@ -16,7 +21,7 @@ lavalink:
       - lapix: true
     bufferDurationMs: 400
     frameBufferDurationMs: 5000
-    gcWarnings: true
+    gcWarnings: false
     playlistFetchLimit: 10
     playlistSearchLimit: 10
     playlistSearchRelevanceFilterLimit: 100

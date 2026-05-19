@@ -36,6 +36,10 @@ export function loadConfig() {
     clientId: requireEnv('CLIENT_ID'),
     guildId: optionalEnv('GUILD_ID'),
     logLevel: optionalEnv('LOG_LEVEL', 'info'),
+    autoSyncGlobalCommands: optionalEnv('AUTO_SYNC_GLOBAL_COMMANDS', 'true') === 'true',
+    autoSyncGuildCommands: optionalEnv('AUTO_SYNC_GUILD_COMMANDS', 'true') === 'true',
+    enableDebugCommands: optionalEnv('ENABLE_DEBUG_COMMANDS', 'false') === 'true',
+    strictDjMode: optionalEnv('STRICT_DJ_MODE', 'false') === 'true',
     lavalink: {
       host: optionalEnv('LAVALINK_HOST', '127.0.0.1'),
       port: optionalNumberEnv('LAVALINK_PORT', 2333),

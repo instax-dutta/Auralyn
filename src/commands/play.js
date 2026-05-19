@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
 import { resolveTrack } from '../utils/tracks.js';
+import { defaultGuildSettings } from '../utils/guild-settings.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -33,7 +34,10 @@ export default {
     }
 
     try {
-      const { track } = await resolveTrack(shoukaku, query);
+      const settings = await client.musicPlayer.getGuildSettings(interaction.guildId);
+      const sourcePriority = settings?.sourcePriority ?? defaultGuildSettings.sourcePriority;
+
+      const { track } = await resolveTrack(shoukaku, query, { sourcePriority });
       if (!track) {
         return interaction.editReply({
           embeds: [buildActionFeedback('No Results', 'Auralyn could not find a playable result for that search.', false)],

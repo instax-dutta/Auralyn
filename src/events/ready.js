@@ -8,7 +8,7 @@ export default {
     client.logger.info(`Serving ${client.guilds.cache.size} servers`);
     
     client.user.setActivity({
-      name: '/play | cinematic music',
+      name: '/play | crystal-clear audio',
       type: 0,
     });
   },

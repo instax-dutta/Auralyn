@@ -1,5 +1,5 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { AuralynColors } from '../utils/embeds.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { buildPingEmbed } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -11,26 +11,8 @@ export default {
 
     const latency = sent.createdTimestamp - interaction.createdTimestamp;
     const wsLatency = interaction.client.ws.ping;
-    
-    let statusColor = AuralynColors.success;
-    if (latency > 200) {
-      statusColor = AuralynColors.warning;
-    }
-    if (latency > 500) {
-      statusColor = AuralynColors.error;
-    }
 
-    const embed = new EmbedBuilder()
-      .setTitle('Auralyn | Status')
-      .setColor(statusColor)
-      .setDescription('Operational and ready for playback.')
-      .addFields(
-        { name: 'API Latency', value: `\`${latency}ms\``, inline: true },
-        { name: 'WebSocket', value: `\`${wsLatency}ms\``, inline: true },
-        { name: 'Bot', value: 'Online', inline: true }
-      )
-      .setTimestamp();
-
+    const embed = buildPingEmbed({ latency, wsLatency });
     await interaction.editReply({ embeds: [embed] });
   },
 };

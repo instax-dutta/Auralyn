@@ -13,6 +13,14 @@ export default {
       return;
     }
 
+    if (userId === client.user?.id) {
+      if (newState.channelId && !oldState.channelId) {
+        client.telemetry?.trackVoiceConnected();
+      } else if (!newState.channelId && oldState.channelId) {
+        client.telemetry?.trackVoiceDisconnected();
+      }
+    }
+
     const guild = oldState.guild || newState.guild;
     if (!guild) return;
 

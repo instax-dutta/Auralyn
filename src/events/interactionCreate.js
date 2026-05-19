@@ -64,10 +64,12 @@ export default {
     }
 
     try {
+      client.telemetry?.trackCommand(interaction.commandName);
       client.logger.info(`Handling /${interaction.commandName} in guild ${interaction.guildId ?? 'dm'}`);
       await command.execute(interaction, client, shoukaku);
       client.logger.debug(`Completed /${interaction.commandName}`);
     } catch (error) {
+      client.telemetry?.trackError();
       client.logger.error(`Error executing /${interaction.commandName}`, error);
       const reply = {
         embeds: [buildActionFeedback('Command Error', 'There was an error executing this command.', false)],
