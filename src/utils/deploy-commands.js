@@ -49,10 +49,26 @@ export function getCommandDeploymentTargets(config) {
   ];
 }
 
-export async function deployCommands(config = loadConfig()) {
+export async function deployCommands(config = loadConfig(), { reset = false } = {}) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
-  const commands = await loadCommandPayloads();
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
+
+  if (reset) {
+    logger.info('RESET requested — clearing all commands from all scopes first.');
+    const resetTargets = getAllScopes(config);
+    for (const target of resetTargets) {
+      if (target.scope === 'global') {
+        await rest.put(Routes.applicationCommands(target.clientId), { body: [] });
+        logger.info('Cleared global commands.');
+      } else {
+        await rest.put(Routes.applicationGuildCommands(target.clientId, target.guildId), { body: [] });
+        logger.info(`Cleared guild commands for ${target.guildId}.`);
+      }
+    }
+    logger.info('Reset complete. Now re-registering commands...');
+  }
+
+  const commands = await loadCommandPayloads();
   const targets = getCommandDeploymentTargets(config);
 
   const names = commands.map(c => c.name).sort();
@@ -74,6 +90,19 @@ export async function deployCommands(config = loadConfig()) {
     );
     logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
   }
+}
+
+export function getAllScopes(config) {
+  const targets = [{ scope: 'global', clientId: config.clientId }];
+  const guildIds = new Set();
+  if (config.guildId) guildIds.add(config.guildId);
+  for (const guildId of config.guildIds ?? []) {
+    if (guildId) guildIds.add(guildId);
+  }
+  for (const guildId of guildIds) {
+    targets.push({ scope: 'guild', clientId: config.clientId, guildId });
+  }
+  return targets;
 }
 
 export async function deployCommandsForGuild(config, guildId) {

@@ -124,7 +124,7 @@ export async function main() {
   await client.login(config.discordToken);
 
   if (config.autoSyncGlobalCommands) {
-    await deployCommands(config);
+    await deployCommands(config, { reset: config.forceResetCommands });
   }
 
   logger.info('Auralyn bot started successfully');
