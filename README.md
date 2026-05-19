@@ -1,37 +1,29 @@
-# Auralyn — Discord Music Bot
+# Auralyn — Zero-Infrastructure Discord Music for Production Communities
 
-**Auralyn** is the first-of-its-kind Lavalink-bundled Discord music bot — crystal-clear audio, seamless playback, fast queues, smart search, and smooth performance, all in a self-contained, single-container deployment on Pelican/Pterodactyl panels or any Docker host.
+Every Discord server deserves crystal-clear audio — without the headache of managing a separate Lavalink server, Java runtime, version mismatches, or port configurations. **Auralyn** bundles everything into a single container. One build, one deploy, zero infrastructure fuss.
 
-## Features
+Built for communities that refuse to compromise on sound quality. The first bot to ship Lavalink, YouTube plugin, lavasrc, and the entire audio pipeline pre-integrated and ready to run.
 
-### Core Playback
-- Discord.js v14 slash commands with rich embed UI
-- High-fidelity audio via Lavalink v4 + YouTube plugin + lavasrc
-- Full queue management with shuffle, remove, track/queue loop
-- Automatic volume normalization per guild
+## What You Get
 
-### Smart Source Resolution
-- **Configurable source priority** — per-guild ordered list (direct URL → Spotify → YouTube)
-- **Quality-aware ranking** — search results scored by title match, duration, artwork, and author metadata; best result selected automatically
-- **Priority fallback** — if a higher-priority source fails, the next source is tried before giving up
-- **Source badges** — nowplaying embed shows which source resolved the track
+### Plug-and-Play Audio
+- One-container deployment — Lavalink v4, Java runtime, and bot all ship together
+- High-fidelity playback with automatic volume normalization
+- Full queue control: shuffle, remove, track-repeat, queue-repeat
+- Interactive skip/pause/resume/stop buttons on every embed
 
-### Operational
-- **Feature flags** — `AUTO_SYNC_GLOBAL_COMMANDS`, `AUTO_SYNC_GUILD_COMMANDS`, `ENABLE_DEBUG_COMMANDS`, `STRICT_DJ_MODE` (env-configured)
-- **Rate-limited guild sync** — command deployment on `guildCreate` is throttled (max 5 burst / 2s interval) to avoid API spam on mass join
-- **Session telemetry** — tracks commands executed, tracks played, errors, voice connections, Lavalink reconnects; logged on startup
-- **Permission policy helper** — `requireVoice`, `requireSameVoiceChannel`, `requireDjOrAdmin` — consistent, descriptive error replies
-- **Domain-split architecture** — queue management (`QueueManager`), track resolution (`resolver.js`), and playback (`MusicPlayer`) separated into focused modules
-- **DSP-minimal default** — flat EQ by default; filters are explicit opt-in only
-- **Production logging** — Lavalink Spring Boot noise suppressed to WARN level; `gcWarnings` disabled
+### Smarter Track Resolution
+- **Priority-based search** — configure source order per guild (direct link first, then Spotify metadata, then YouTube search fallback)
+- **Best-match ranking** — search results scored by title match, duration, artwork presence, and author metadata; you get the best result, not the first result
+- **Graceful fallback** — if Spotify resolution fails, YouTube search kicks in automatically
+- **Source badges** — every "now playing" display shows where the track came from
 
-### UI & Commands
-- Consistent embed styling with `buildActionFeedback`, `replyWithPlayerSnapshot`, `buildQueueReply`
-- `/help` command with categorized command listing
-- `/ping` with latency-aware color coding (via shared `buildPingEmbed`)
-- `/nowplaying` with current track, source, volume, loop state, queue length, and interactive buttons
-- Button controls (skip/pause/resume/stop) on all playback embeds
-- Auto-leave on 2m voice channel inactivity
+### Built for Real Communities
+- **Feature flags** — toggle global/guild command sync, debug commands, and strict DJ mode via environment variables
+- **Rate-limited onboarding** — command deployment throttled on mass guild join to stay inside Discord's API limits
+- **Usage telemetry** — track commands, tracks played, errors, voice sessions, and Lavalink reconnects
+- **Permission helpers** — consistent voice-channel and role checks with clear error messages
+- **Production logs** — Lavalink Spring Boot noise suppressed; clean output you can actually read
 
 ## Requirements
 
@@ -194,4 +186,8 @@ auralyn/
 
 ## License
 
-MIT
+MIT — use it, modify it, ship it. Auralyn was built for the community.
+
+---
+
+*Crystal-clear audio. Seamless playback. Fast queues. Smart search. Smooth performance.*
