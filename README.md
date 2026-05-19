@@ -1,6 +1,6 @@
 # Auralyn — Discord Music Bot
 
-**Auralyn** is a branded fork of the Lavakit Discord music bot, enhanced for crystal-clear audio, seamless playback, fast queues, smart search, and smooth performance. It bundles an embedded Lavalink v4 server for a self-contained, single-container deployment on Pelican/Pterodactyl panels or any Docker host.
+**Auralyn** is the first-of-its-kind Lavalink-bundled Discord music bot — crystal-clear audio, seamless playback, fast queues, smart search, and smooth performance, all in a self-contained, single-container deployment on Pelican/Pterodactyl panels or any Docker host.
 
 ## Features
 
@@ -195,5 +195,3 @@ auralyn/
 ## License
 
 MIT
-
-Auralyn is a branded fork. Upstream: [Lavakit](https://github.com/instax-dutta/lavakit).
