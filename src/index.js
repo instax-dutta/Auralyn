@@ -124,13 +124,17 @@ export async function main() {
   await client.login(config.discordToken);
 
   if (config.autoSyncGlobalCommands) {
-    const markerFile = '/app/.reset-commands';
+    const markerPaths = [
+      '/app/.reset-commands',
+      '/home/container/.reset-commands',
+    ];
+    const markerPath = markerPaths.find(p => existsSync(p));
     const reset = config.forceResetCommands
       || process.argv.includes('--reset-commands')
-      || existsSync(markerFile);
+      || !!markerPath;
     await deployCommands(config, { reset });
-    if (reset && existsSync(markerFile)) {
-      try { unlinkSync(markerFile); } catch { /* ignore */ }
+    if (markerPath) {
+      try { unlinkSync(markerPath); } catch { /* ignore */ }
     }
   }
 
