@@ -19,6 +19,7 @@ export class MusicPlayer {
     this.telemetry = telemetry;
     this.queueManager = new QueueManager(logger.child('queue'));
     this.voteSkipSets = new Map();
+    this._reconnecting = new Set();
   }
 
   get players() {
@@ -229,6 +230,70 @@ export class MusicPlayer {
 
   async handleConnectionClosed(guildId, event) {
     this.logger.warn(`Voice connection closed in guild ${guildId}`, event);
+
+    if (this._reconnecting.has(guildId)) {
+      this.logger.info(`Already reconnecting for guild ${guildId}, ignoring duplicate close event`);
+      return;
+    }
+
+    const settings = await this.getGuildSettings(guildId);
+    if (settings.twentyFourSeven) {
+      this.logger.info(`24/7 mode enabled, reconnecting for guild ${guildId}`);
+
+      this.cleanupGuild(guildId);
+      const state = this.queueManager.getState(guildId);
+      state.lavalinkPlayer = null;
+
+      this._reconnecting.add(guildId);
+      try {
+        const voiceChannel = state.voiceChannel;
+        if (!voiceChannel) {
+          this.logger.warn(`No voice channel stored for guild ${guildId}, cannot reconnect`);
+          await this.stop(guildId);
+          return;
+        }
+
+        const player = await this.shoukaku.joinVoiceChannel({
+          guildId,
+          channelId: voiceChannel.id,
+          shardId: voiceChannel.guild?.shardId ?? 0,
+          deaf: true,
+          mute: false,
+        });
+
+        const listeners = {
+          end: (event) => this.handleTrackEnd(guildId, event),
+          stuck: (event) => this.handleTrackProblem(guildId, event),
+          exception: (event) => this.handleTrackProblem(guildId, event),
+          closed: (event) => this.handleConnectionClosed(guildId, event),
+        };
+
+        for (const [event, listener] of Object.entries(listeners)) {
+          player.on(event, listener);
+        }
+
+        state.lavalinkPlayer = player;
+        this.queueManager.setListeners(guildId, listeners);
+
+        if (state.currentTrack) {
+          await player.playTrack({ track: { encoded: state.currentTrack.encoded } });
+          this.logger.info(`Resumed playback for guild ${guildId}`);
+        } else if (state.queue.length > 0) {
+          await this.playNext(guildId);
+        } else {
+          this.logger.info(`Reconnected voice for guild ${guildId}, queue is empty`);
+        }
+
+        return;
+      } catch (error) {
+        this.logger.error(`Failed to reconnect for guild ${guildId}`, error);
+        await this.stop(guildId);
+        return;
+      } finally {
+        this._reconnecting.delete(guildId);
+      }
+    }
+
     await this.stop(guildId);
   }
 

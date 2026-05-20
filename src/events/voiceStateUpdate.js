@@ -7,6 +7,11 @@ export default {
     if (userId === client.user?.id && oldState.channelId && !newState.channelId) {
       const guildId = oldState.guild.id;
       if (guildId) {
+        try {
+          const settings = await client.musicPlayer.getGuildSettings(guildId);
+          if (settings.twentyFourSeven) return;
+        } catch { /* proceed with normal cleanup */ }
+
         client.musicPlayer.cleanupGuild(guildId);
         client.musicPlayer.players.delete(guildId);
       }
