@@ -10,6 +10,38 @@ const SOURCE_PREFIX_MAP = {
   soundcloud: 'scsearch',
 };
 
+const UNOFFICIAL_TITLE_PATTERNS = [
+  /\bremix(?:ed|es)?\b/i,
+  /\bcover\b/i,
+  /\blo-?\s?fi\b/i,
+  /\bsped[\s-]?up\b/i,
+  /\bspeed[\s-]?up\b/i,
+  /\bslowed\b/i,
+  /\breverb\b/i,
+  /\bkaraoke\b/i,
+  /\binstrumental\b/i,
+  /\bbass[\s-]?boosted\b/i,
+  /\bnightcore\b/i,
+  /\b8d\b/i,
+  /\bmashup\b/i,
+  /\bchopped\b/i,
+  /\bscrewed\b/i,
+  /\bpiano version\b/i,
+  /\bguitar version\b/i,
+  /\bacoustic version\b/i,
+];
+
+const OFFICIAL_AUTHOR_PATTERNS = [
+  /\s-\s?topic$/i,
+  /vevo$/i,
+  /\bvevo\b/i,
+  /\bofficial\b/i,
+];
+
+const OFFICIAL_TITLE_PATTERNS = [
+  /\bofficial\b/i,
+];
+
 export function normalizeSearchQuery(query, prefix = 'ytsearch') {
   const trimmed = query.trim();
   if (URL_PATTERN.test(trimmed)) return trimmed;
@@ -60,6 +92,21 @@ function sourceLabel(sourceName) {
   return sourceName;
 }
 
+function queryRequestsUnofficial(queryLower) {
+  return UNOFFICIAL_TITLE_PATTERNS.some(rx => rx.test(queryLower));
+}
+
+function hasUnofficialMarker(titleLower) {
+  return UNOFFICIAL_TITLE_PATTERNS.some(rx => rx.test(titleLower));
+}
+
+function hasOfficialSignal(title, author) {
+  return (
+    OFFICIAL_AUTHOR_PATTERNS.some(rx => rx.test(author))
+    || OFFICIAL_TITLE_PATTERNS.some(rx => rx.test(title))
+  );
+}
+
 function scoreSearchResult(track, query) {
   const info = track?.info ?? {};
   let score = 0;
@@ -83,6 +130,13 @@ function scoreSearchResult(track, query) {
   const titleWords = titleLower.split(/\s+/);
   const matchCount = queryWords.filter(w => titleWords.some(tw => tw.includes(w))).length;
   score += (matchCount / Math.max(queryWords.length, 1)) * 2;
+
+  if (!queryRequestsUnofficial(queryLower) && hasUnofficialMarker(titleLower)) {
+    score -= 4;
+  }
+  if (hasOfficialSignal(info.title ?? '', info.author ?? '')) {
+    score += 3;
+  }
 
   return score;
 }
