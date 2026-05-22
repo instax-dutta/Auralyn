@@ -2,6 +2,7 @@ logging:
   level:
     lavalink: WARN
     org.springframework: WARN
+    com.github.topi314.lavasrc.spotify: 'OFF'
 
 server:
   address: "127.0.0.1"

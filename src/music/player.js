@@ -1,5 +1,8 @@
+import { LoadType } from 'shoukaku';
 import { createSilentLogger } from '../utils/logger.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
+import { extractYoutubeVideoId } from '../utils/tracks.js';
+import { infoEmbed } from '../utils/embeds.js';
 import { QueueManager, LOOP_TRACK } from './queue.js';
 
 const END_REASONS_THAT_SHOULD_ADVANCE = new Set(['finished', 'loadFailed']);
@@ -196,31 +199,72 @@ export class MusicPlayer {
     if (!settings.autoplay) return null;
 
     const history = this.queueManager.getHistory(guildId);
-    const seedTrack = history[history.length - 1];
+    const seedTrack = state.currentTrack ?? history[history.length - 1];
     if (!seedTrack?.info?.title) return null;
 
-    const source = settings.sourcePriority?.[0] ?? 'youtube';
-    const artist = seedTrack.info.author ?? '';
-    const title = seedTrack.info.title;
+    const seenIds = new Set();
+    for (const past of history) {
+      const id = extractYoutubeVideoId(past?.info?.uri);
+      if (id) seenIds.add(id);
+    }
+    const seedId = extractYoutubeVideoId(seedTrack.info.uri);
+    if (seedId) seenIds.add(seedId);
 
-    const query = `${artist} ${title}`.trim();
-    if (!query) return null;
+    const pick = (candidates) => candidates?.find(t => {
+      const id = extractYoutubeVideoId(t?.info?.uri);
+      return id && !seenIds.has(id);
+    }) ?? null;
 
-    if (!this.trackResolver?.resolve) return null;
+    if (seedId) {
+      const mixTracks = await this.fetchYoutubeMix(seedId);
+      const mixPick = pick(mixTracks);
+      if (mixPick) {
+        return { ...mixPick, requestedByUserId: null, requestedByName: 'autoplay' };
+      }
+    }
 
+    const fallbackQuery = (seedTrack.info.author || seedTrack.info.title || '').trim();
+    if (fallbackQuery) {
+      try {
+        const node = this.shoukaku.getIdealNode();
+        if (node) {
+          const result = await node.rest.resolve(`ytmsearch:${fallbackQuery}`);
+          const searchHits = result?.loadType === LoadType.SEARCH ? result.data : [];
+          const searchPick = pick(searchHits);
+          if (searchPick) {
+            return { ...searchPick, requestedByUserId: null, requestedByName: 'autoplay' };
+          }
+        }
+      } catch (error) {
+        this.logger.error(`Autoplay search failed for guild ${guildId}`, error);
+      }
+    }
+
+    this.notifyAutoplayMiss(state.textChannel);
+    return null;
+  }
+
+  async fetchYoutubeMix(videoId) {
     try {
-      const result = await this.trackResolver.resolve(this.shoukaku, query, { sourcePriority: [source] });
-      if (!result?.track) return null;
-
-      return {
-        ...result.track,
-        requestedByUserId: null,
-        requestedByName: 'autoplay',
-      };
-    } catch (error) {
-      this.logger.error(`Autoplay search failed for guild ${guildId}`, error);
+      const node = this.shoukaku.getIdealNode();
+      if (!node) return null;
+      const url = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
+      const result = await node.rest.resolve(url);
+      if (result?.loadType !== LoadType.PLAYLIST) return null;
+      return result.data?.tracks ?? null;
+    } catch {
       return null;
     }
+  }
+
+  notifyAutoplayMiss(textChannel) {
+    if (!textChannel?.send) return;
+    textChannel.send({
+      embeds: [infoEmbed(
+        "Autoplay couldn't find a related track. Add more with `/play` or `/search`.",
+        'Auralyn | Autoplay',
+      )],
+    }).catch(() => { /* best-effort */ });
   }
 
   async handleTrackProblem(guildId, event) {
