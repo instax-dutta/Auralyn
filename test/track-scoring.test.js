@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createTrackResolver, isSpotifyUrl } from '../src/utils/tracks.js';
+import { createTrackResolver } from '../src/utils/tracks.js';
 
 const track = ({ title, author = 'Unknown Channel', length = 240000, artwork = 'https://img/x.png' }) => ({
   encoded: `enc-${title}`,
@@ -77,16 +77,4 @@ test('lofi / sped up / slowed variants are penalised when not requested', async 
 
   const { track: picked } = await resolver.resolve(shoukaku, 'hometown', { sourcePriority: ['youtube'] });
   assert.equal(picked.info.title, 'Hometown (Official Audio)');
-});
-
-test('isSpotifyUrl detects spotify links and URIs but not other URLs', () => {
-  assert.equal(isSpotifyUrl('https://open.spotify.com/playlist/5mAjeEzPZ94mSfZajZlvDE?si=abc'), true);
-  assert.equal(isSpotifyUrl('https://open.spotify.com/track/abc123'), true);
-  assert.equal(isSpotifyUrl('https://open.spotify.com/intl-en/album/xyz'), true);
-  assert.equal(isSpotifyUrl('spotify:track:abc123'), true);
-  assert.equal(isSpotifyUrl('  https://open.spotify.com/track/abc  '), true);
-  assert.equal(isSpotifyUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), false);
-  assert.equal(isSpotifyUrl('dungu thili'), false);
-  assert.equal(isSpotifyUrl(null), false);
-  assert.equal(isSpotifyUrl(''), false);
 });

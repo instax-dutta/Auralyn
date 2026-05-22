@@ -1,8 +1,7 @@
 import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
-import { resolveTrack, isSpotifyUrl } from '../utils/tracks.js';
+import { resolveTrack } from '../utils/tracks.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
-import { infoEmbed } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -31,16 +30,6 @@ export default {
     if (botVoiceChannelId && botVoiceChannelId !== voiceChannel.id) {
       return interaction.editReply({
         embeds: [buildActionFeedback('Voice Session Locked', 'Auralyn is already connected to a different voice channel.', false)],
-        components: [],
-      });
-    }
-
-    if (isSpotifyUrl(query)) {
-      return interaction.editReply({
-        embeds: [infoEmbed(
-          "Spotify links aren't supported on Auralyn yet. Paste a YouTube link instead, or just type the song name and Auralyn will find it.",
-          'Auralyn | Spotify Unsupported',
-        )],
         components: [],
       });
     }
