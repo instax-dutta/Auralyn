@@ -36,14 +36,14 @@ export class QueueManager {
   enqueue(guildId, track) {
     const state = this.getState(guildId);
     state.queue.push(track);
-    this.logger.info(`Enqueued track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
+    this.logger.debug(`Enqueued track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
     return state;
   }
 
   enqueueFront(guildId, track) {
     const state = this.getState(guildId);
     state.queue.unshift(track);
-    this.logger.info(`Prepended track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
+    this.logger.debug(`Prepended track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
     return state;
   }
 

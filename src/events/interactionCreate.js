@@ -65,7 +65,7 @@ export default {
 
     try {
       client.telemetry?.trackCommand(interaction.commandName);
-      client.logger.info(`Handling /${interaction.commandName} in guild ${interaction.guildId ?? 'dm'}`);
+      client.logger.debug(`Handling /${interaction.commandName} in guild ${interaction.guildId ?? 'dm'}`);
       await command.execute(interaction, client, shoukaku);
       client.logger.debug(`Completed /${interaction.commandName}`);
     } catch (error) {

@@ -59,13 +59,13 @@ export async function deployCommands(config = loadConfig(), { reset = false } = 
     for (const target of resetTargets) {
       if (target.scope === 'global') {
         await rest.put(Routes.applicationCommands(target.clientId), { body: [] });
-        logger.info('Cleared global commands.');
+        logger.debug('Cleared global commands.');
       } else {
         await rest.put(Routes.applicationGuildCommands(target.clientId, target.guildId), { body: [] });
-        logger.info(`Cleared guild commands for ${target.guildId}.`);
+        logger.debug(`Cleared guild commands for ${target.guildId}.`);
       }
     }
-    logger.info('Reset complete. Now re-registering commands...');
+    logger.debug('Reset complete. Now re-registering commands...');
   }
 
   const commands = await loadCommandPayloads();

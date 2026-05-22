@@ -51,7 +51,7 @@ export class MusicPlayer {
     await this.persistGuildState(guildId);
 
     if (!state.isPlaying) {
-      this.logger.info(`Guild ${guildId} is idle, starting playback`);
+      this.logger.debug(`Guild ${guildId} is idle, starting playback`);
       await this.playNext(guildId);
     }
 
@@ -83,7 +83,7 @@ export class MusicPlayer {
     await this.persistGuildState(guildId);
 
     if (!state.isPlaying) {
-      this.logger.info(`Guild ${guildId} is idle, starting playback`);
+      this.logger.debug(`Guild ${guildId} is idle, starting playback`);
       await this.playNext(guildId);
     }
 
@@ -99,7 +99,7 @@ export class MusicPlayer {
       throw new Error('Cannot create Lavalink player without a voice channel.');
     }
 
-    this.logger.info(`Joining voice channel ${voiceChannel.id} for guild ${guildId}`);
+    this.logger.debug(`Joining voice channel ${voiceChannel.id} for guild ${guildId}`);
     player = await this.shoukaku.joinVoiceChannel({
       guildId,
       channelId: voiceChannel.id,
@@ -107,7 +107,7 @@ export class MusicPlayer {
       deaf: true,
       mute: false,
     });
-    this.logger.info(`Joined voice channel ${voiceChannel.id} for guild ${guildId}`);
+    this.logger.debug(`Joined voice channel ${voiceChannel.id} for guild ${guildId}`);
 
     const listeners = {
       end: (event) => this.handleTrackEnd(guildId, event),
@@ -132,7 +132,7 @@ export class MusicPlayer {
     const nextTrack = this.queueManager.getNextTrack(state);
 
     if (!nextTrack) {
-      this.logger.info(`No next track available for guild ${guildId}`);
+      this.logger.debug(`No next track available for guild ${guildId}`);
       this.queueManager.setCurrentTrack(guildId, null);
       state.isPlaying = false;
       state.isPaused = false;
@@ -143,11 +143,11 @@ export class MusicPlayer {
     this.queueManager.setCurrentTrack(guildId, nextTrack);
     this.clearVoteSkipSet(guildId);
 
-    this.logger.info(`Preparing to play track for guild ${guildId}: ${nextTrack?.info?.title ?? 'unknown'}`);
+    this.logger.debug(`Preparing to play track for guild ${guildId}: ${nextTrack?.info?.title ?? 'unknown'}`);
     const player = await this.getOrCreateLavalinkPlayer(guildId);
-    this.logger.info(`Sending playTrack to Lavalink for guild ${guildId}`);
+    this.logger.debug(`Sending playTrack to Lavalink for guild ${guildId}`);
     await player.playTrack({ track: { encoded: nextTrack.encoded } });
-    this.logger.info(`playTrack completed for guild ${guildId}`);
+    this.logger.debug(`playTrack completed for guild ${guildId}`);
     this.telemetry?.trackTrackPlayed();
     await this.persistGuildState(guildId);
     return nextTrack;
@@ -232,13 +232,13 @@ export class MusicPlayer {
     this.logger.warn(`Voice connection closed in guild ${guildId}`, event);
 
     if (this._reconnecting.has(guildId)) {
-      this.logger.info(`Already reconnecting for guild ${guildId}, ignoring duplicate close event`);
+      this.logger.debug(`Already reconnecting for guild ${guildId}, ignoring duplicate close event`);
       return;
     }
 
     const settings = await this.getGuildSettings(guildId);
     if (settings.twentyFourSeven) {
-      this.logger.info(`24/7 mode enabled, reconnecting for guild ${guildId}`);
+      this.logger.debug(`24/7 mode enabled, reconnecting for guild ${guildId}`);
 
       this.cleanupGuild(guildId);
       const state = this.queueManager.getState(guildId);
@@ -277,11 +277,11 @@ export class MusicPlayer {
 
         if (state.currentTrack) {
           await player.playTrack({ track: { encoded: state.currentTrack.encoded } });
-          this.logger.info(`Resumed playback for guild ${guildId}`);
+          this.logger.debug(`Resumed playback for guild ${guildId}`);
         } else if (state.queue.length > 0) {
           await this.playNext(guildId);
         } else {
-          this.logger.info(`Reconnected voice for guild ${guildId}, queue is empty`);
+          this.logger.debug(`Reconnected voice for guild ${guildId}, queue is empty`);
         }
 
         return;
