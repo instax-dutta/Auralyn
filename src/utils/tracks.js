@@ -4,6 +4,13 @@ import { DEFAULT_SOURCE_PRIORITY } from './guild-settings.js';
 const URL_PATTERN = /^https?:\/\//i;
 const SEARCH_SOURCE_PREFIXES = new Set(['ytsearch', 'ytmsearch', 'scsearch', 'spsearch']);
 
+const SPOTIFY_URL_PATTERN = /^(?:https?:\/\/(?:open|play)\.spotify\.com\/|spotify:)/i;
+
+export function isSpotifyUrl(query) {
+  if (typeof query !== 'string') return false;
+  return SPOTIFY_URL_PATTERN.test(query.trim());
+}
+
 const YOUTUBE_VIDEO_ID_PATTERN = /(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)*v=|embed\/|v\/|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?(?:[^#\s]*&)*v=)([A-Za-z0-9_-]{11})/;
 
 export function extractYoutubeVideoId(uri) {

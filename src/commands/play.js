@@ -1,10 +1,8 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
-import { resolveTrack } from '../utils/tracks.js';
+import { resolveTrack, isSpotifyUrl } from '../utils/tracks.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { infoEmbed } from '../utils/embeds.js';
-
-const SPOTIFY_PLAYLIST_RE = /^https?:\/\/(?:open\.)?spotify\.com\/(playlist|album)\//;
 
 export default {
   data: new SlashCommandBuilder()
@@ -12,7 +10,7 @@ export default {
     .setDescription('Play a song or add it to the queue')
     .addStringOption(option =>
       option.setName('query')
-        .setDescription('The song to play (YouTube URL, Spotify URL, or search terms)')
+        .setDescription('The song to play (YouTube URL or search terms)')
         .setRequired(true)),
 
   async execute(interaction, client, shoukaku) {
@@ -36,13 +34,11 @@ export default {
       });
     }
 
-    const isSpotifyCollection = SPOTIFY_PLAYLIST_RE.test(query.trim());
-
-    if (isSpotifyCollection) {
-      await interaction.editReply({
+    if (isSpotifyUrl(query)) {
+      return interaction.editReply({
         embeds: [infoEmbed(
-          'Fetching tracks from Spotify, please wait a moment \u266A',
-          'Auralyn | Hold Tight',
+          "Spotify links aren't supported on Auralyn yet. Paste a YouTube link instead, or just type the song name and Auralyn will find it.",
+          'Auralyn | Spotify Unsupported',
         )],
         components: [],
       });
