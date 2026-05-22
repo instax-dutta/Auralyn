@@ -6,7 +6,7 @@ export const DEFAULT_SOURCE_PRIORITY = ['direct', 'spotify', 'youtube'];
 export const VALID_SOURCES = new Set(['direct', 'spotify', 'youtube', 'soundcloud']);
 
 export const defaultGuildSettings = Object.freeze({
-  defaultVolume: 100,
+  defaultVolume: 70,
   autoplay: false,
   inactivityTimeoutMs: 120000,
   djRoleIds: [],

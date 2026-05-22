@@ -20,7 +20,9 @@ lavalink:
     plugins:
       - lapix: true
     bufferDurationMs: 400
-    frameBufferDurationMs: 5000
+    frameBufferDurationMs: 10000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
     gcWarnings: false
     playlistFetchLimit: 10
     playlistSearchLimit: 10

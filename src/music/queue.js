@@ -22,7 +22,7 @@ export class QueueManager {
         currentTrack: null,
         isPlaying: false,
         isPaused: false,
-        volume: 100,
+        volume: 70,
         loopMode: LOOP_OFF,
         textChannel: null,
         voiceChannel: null,
