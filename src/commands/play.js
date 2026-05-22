@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
 import { resolveTrack, isSpotifyUrl } from '../utils/tracks.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
@@ -8,6 +8,7 @@ export default {
   data: new SlashCommandBuilder()
     .setName('play')
     .setDescription('Play a song or add it to the queue')
+    .setContexts(InteractionContextType.Guild)
     .addStringOption(option =>
       option.setName('query')
         .setDescription('The song to play (YouTube URL or search terms)')

@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
@@ -8,6 +8,7 @@ export default {
     .addIntegerOption(option =>
       option.setName('volume')
         .setDescription('The volume percentage')
+    .setContexts(InteractionContextType.Guild)
         .setRequired(true)
         .setMinValue(1)
         .setMaxValue(100)),

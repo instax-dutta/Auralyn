@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { createEmbed, AuralynColors } from '../utils/embeds.js';
 
 const CATEGORIES = [
@@ -56,7 +56,8 @@ const CATEGORIES = [
 export default {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Show available commands and how to use Auralyn'),
+    .setDescription('Show available commands and how to use Auralyn')
+    .setContexts(InteractionContextType.Guild),
 
   async execute(interaction) {
     await interaction.deferReply();

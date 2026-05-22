@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildQueueReply } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('queue')
-    .setDescription('View the current music queue'),
+    .setDescription('View the current music queue')
+    .setContexts(InteractionContextType.Guild),
 
   async execute(interaction, client, shoukaku) {
     await interaction.deferReply();

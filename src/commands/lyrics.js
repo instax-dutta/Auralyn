@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback } from '../utils/music-ui.js';
 import { createEmbed, AuralynColors } from '../utils/embeds.js';
 import { trackTitle, trackAuthor } from '../utils/tracks.js';
@@ -9,6 +9,7 @@ export default {
   data: new SlashCommandBuilder()
     .setName('lyrics')
     .setDescription('Fetch lyrics for the current track or a specific song')
+    .setContexts(InteractionContextType.Guild)
     .addStringOption(option =>
       option.setName('query')
         .setDescription('Song title and artist (optional — uses current track if omitted)')

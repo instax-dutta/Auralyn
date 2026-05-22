@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, SlashCommandBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { formatDuration, trackTitle, trackAuthor } from '../utils/tracks.js';
@@ -12,6 +12,7 @@ export default {
   data: new SlashCommandBuilder()
     .setName('search')
     .setDescription('Search for a track and pick from results')
+    .setContexts(InteractionContextType.Guild)
     .addStringOption(option =>
       option.setName('query')
         .setDescription('Search terms')

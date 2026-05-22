@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { createEmbed, AuralynColors } from '../utils/embeds.js';
 
 const INVITE_PERMISSIONS = 2150755648;
@@ -21,7 +21,8 @@ const PERMISSION_LABELS = [
 export default {
   data: new SlashCommandBuilder()
     .setName('invite')
-    .setDescription('Get an invite link to add Auralyn to your server'),
+    .setDescription('Get an invite link to add Auralyn to your server')
+    .setContexts(InteractionContextType.Guild),
 
   async execute(interaction) {
     await interaction.deferReply();

@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('previous')
-    .setDescription('Play the previous track'),
+    .setDescription('Play the previous track')
+    .setContexts(InteractionContextType.Guild),
 
   async execute(interaction, client, shoukaku) {
     await interaction.deferReply();

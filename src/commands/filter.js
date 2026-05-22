@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback } from '../utils/music-ui.js';
 
 /**
@@ -225,6 +225,7 @@ export default {
   data: new SlashCommandBuilder()
     .setName('filter')
     .setDescription('Apply an audio filter preset to the current playback')
+    .setContexts(InteractionContextType.Guild)
     .addStringOption(option =>
       option.setName('preset')
         .setDescription('Choose a filter preset')

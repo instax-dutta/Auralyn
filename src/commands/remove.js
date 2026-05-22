@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildRemovedTrackEmbed, buildQueueReply } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('remove')
     .setDescription('Remove a track from the queue')
+    .setContexts(InteractionContextType.Guild)
     .addIntegerOption(option =>
       option.setName('position')
         .setDescription('Position in queue (run /queue to see positions)')

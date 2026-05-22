@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('seek')
     .setDescription('Seek to a specific position in the current track')
+    .setContexts(InteractionContextType.Guild)
     .addIntegerOption(option =>
       option.setName('position')
         .setDescription('Target position in seconds')

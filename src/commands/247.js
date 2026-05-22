@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback } from '../utils/music-ui.js';
 
 export default {
@@ -8,6 +8,7 @@ export default {
     .addBooleanOption(option =>
       option.setName('enabled')
         .setDescription('Enable or disable 24/7 mode')
+    .setContexts(InteractionContextType.Guild)
         .setRequired(true)),
 
   async execute(interaction, client, shoukaku) {

@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildQueueReply } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('shuffle')
-    .setDescription('Shuffle the queue'),
+    .setDescription('Shuffle the queue')
+    .setContexts(InteractionContextType.Guild),
 
   async execute(interaction, client, shoukaku) {
     await interaction.deferReply();

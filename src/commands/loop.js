@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('loop')
     .setDescription('Toggle loop mode for the queue')
+    .setContexts(InteractionContextType.Guild)
     .addStringOption(option =>
       option.setName('mode')
         .setDescription('Loop mode to set')

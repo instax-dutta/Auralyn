@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import { buildPingEmbed } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Check bot latency'),
+    .setDescription('Check bot latency')
+    .setContexts(InteractionContextType.Guild),
   async execute(interaction) {
     const wsLatency = interaction.client.ws.ping;
     await interaction.deferReply();
