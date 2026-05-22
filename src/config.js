@@ -41,6 +41,7 @@ export function loadConfig() {
     enableDebugCommands: optionalEnv('ENABLE_DEBUG_COMMANDS', 'false') === 'true',
     strictDjMode: optionalEnv('STRICT_DJ_MODE', 'false') === 'true',
     forceResetCommands: optionalEnv('FORCE_RESET_COMMANDS', 'false') === 'true',
+    dataDir: optionalEnv('DATA_DIR', '/app/data'),
     lavalink: {
       host: optionalEnv('LAVALINK_HOST', '127.0.0.1'),
       port: optionalNumberEnv('LAVALINK_PORT', 2333),

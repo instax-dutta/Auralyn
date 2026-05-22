@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Collection } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Collection } from 'discord.js';
 import { Connectors, Shoukaku } from 'shoukaku';
 import fs, { existsSync, unlinkSync } from 'fs';
 import path from 'path';
@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from './config.js';
 import { MusicPlayer, createTrackResolver } from './music/index.js';
 import { GuildSettingsStore } from './utils/guild-settings.js';
+import { JsonSessionStore } from './utils/session-store.js';
 import { createLogger } from './utils/logger.js';
 import { deployCommands, deployCommandsForGuild } from './utils/deploy-commands.js';
 import { RateLimiter } from './utils/rate-limiter.js';
@@ -46,10 +47,16 @@ const shoukaku = new Shoukaku(
 );
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
-client.settingsStore = new GuildSettingsStore();
+client.settingsStore = new GuildSettingsStore({
+  filePath: path.join(config.dataDir, 'guild-settings.json'),
+});
+const sessionStore = new JsonSessionStore({
+  filePath: path.join(config.dataDir, 'sessions.json'),
+});
 const trackResolver = createTrackResolver();
 client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), {
   settingsStore: client.settingsStore,
+  sessionStore,
   trackResolver,
   telemetry: client.telemetry,
 });
@@ -100,6 +107,29 @@ const setupShoukakuEvents = () => {
   });
 };
 
+const setupClientEvents = () => {
+  client.on(Events.Error, (error) => {
+    logger.error('Discord client error', error);
+  });
+  client.on(Events.ShardError, (error, shardId) => {
+    logger.error(`Shard ${shardId} error`, error);
+  });
+  client.on(Events.ShardDisconnect, (event, shardId) => {
+    logger.warn(`Shard ${shardId} disconnected (code=${event?.code ?? 'unknown'})`);
+  });
+  client.on(Events.ShardReconnecting, (shardId) => {
+    logger.debug(`Shard ${shardId} reconnecting...`);
+  });
+  client.on(Events.ShardResume, (shardId, replayedEvents) => {
+    logger.info(`Shard ${shardId} resumed (replayed ${replayedEvents} events)`);
+    client.telemetry?.trackReconnect();
+  });
+  client.on(Events.Invalidated, () => {
+    logger.error('Discord session invalidated — exiting for clean container restart');
+    process.exit(1);
+  });
+};
+
 const shutdown = async (signal) => {
   logger.warn(`Received ${signal}. Shutting down Auralyn...`);
   for (const guildId of [...client.musicPlayer.players.keys()]) {
@@ -119,6 +149,7 @@ export async function main() {
   await loadCommands();
   await loadEvents();
   setupShoukakuEvents();
+  setupClientEvents();
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
@@ -132,7 +163,10 @@ export async function main() {
     const reset = config.forceResetCommands
       || process.argv.includes('--reset-commands')
       || !!markerPath;
-    await deployCommands(config, { reset });
+    await deployCommands(config, {
+      reset,
+      hashPath: path.join(config.dataDir, 'commands.hash'),
+    });
     if (markerPath) {
       try { unlinkSync(markerPath); } catch { /* ignore */ }
     }

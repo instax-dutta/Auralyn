@@ -41,7 +41,7 @@ function sanitizeGuildSettings(input = {}) {
   };
 }
 
-const DEFAULT_FILE_PATH = '/tmp/guild-settings.json';
+const DEFAULT_FILE_PATH = '/app/data/guild-settings.json';
 
 export class GuildSettingsStore {
   constructor({ filePath } = {}) {

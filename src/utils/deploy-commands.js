@@ -1,6 +1,7 @@
 import { REST, Routes } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'node:crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from '../config.js';
@@ -10,6 +11,27 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function hashCommands(commands) {
+  return createHash('sha256').update(JSON.stringify(commands)).digest('hex');
+}
+
+function readStoredHash(hashPath) {
+  try {
+    return fs.readFileSync(hashPath, 'utf8').trim();
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredHash(hashPath, hash, logger) {
+  try {
+    fs.mkdirSync(path.dirname(hashPath), { recursive: true });
+    fs.writeFileSync(hashPath, hash);
+  } catch (err) {
+    logger.warn(`Could not persist commands hash to ${hashPath}: ${err.message}`);
+  }
+}
 
 export async function loadCommandPayloads() {
   const commands = [];
@@ -49,7 +71,7 @@ export function getCommandDeploymentTargets(config) {
   ];
 }
 
-export async function deployCommands(config = loadConfig(), { reset = false } = {}) {
+export async function deployCommands(config = loadConfig(), { reset = false, hashPath = null, force = false } = {}) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
 
@@ -70,6 +92,15 @@ export async function deployCommands(config = loadConfig(), { reset = false } = 
 
   const commands = await loadCommandPayloads();
   const targets = getCommandDeploymentTargets(config);
+  const commandHash = hashCommands(commands);
+
+  if (hashPath && !reset && !force) {
+    const stored = readStoredHash(hashPath);
+    if (stored === commandHash) {
+      logger.info(`Commands unchanged since last deploy (hash=${commandHash.slice(0, 8)}); skipping sync to preserve daily rate limit.`);
+      return;
+    }
+  }
 
   const names = commands.map(c => c.name).sort();
   logger.info(`Refreshing ${commands.length} application commands: ${names.join(', ')}`);
@@ -89,6 +120,10 @@ export async function deployCommands(config = loadConfig(), { reset = false } = 
       { body: commands },
     );
     logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
+  }
+
+  if (hashPath) {
+    writeStoredHash(hashPath, commandHash, logger);
   }
 }
 
@@ -122,7 +157,8 @@ const isMainModule = process.argv[1]
 
 if (isMainModule) {
   const shouldReset = process.argv.includes('--reset');
-  deployCommands(undefined, { reset: shouldReset })
+  const shouldForce = process.argv.includes('--force');
+  deployCommands(undefined, { reset: shouldReset, force: shouldForce })
     .then(() => {
       process.stdout.write('[deploy-commands] Done — exiting.\n');
       process.exit(0);
