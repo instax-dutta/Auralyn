@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, Collection } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Collection, Options } from 'discord.js';
 import { Connectors, Shoukaku } from 'shoukaku';
 import fs, { existsSync, unlinkSync } from 'fs';
 import path from 'path';
@@ -25,6 +25,21 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
   ],
+  sweepers: {
+    ...Options.DefaultSweeperSettings,
+    messages: { interval: 3600, lifetime: 1800 },
+    users: {
+      interval: 3600,
+      filter: () => (user) => user.bot && user.id !== user.client.user?.id,
+    },
+  },
+  makeCache: Options.cacheWithLimits({
+    ...Options.DefaultMakeCacheSettings,
+    MessageManager: 50,
+    PresenceManager: 0,
+    ReactionManager: 0,
+    ReactionUserManager: 0,
+  }),
 });
 client.commands = new Collection();
 client.logger = logger;
@@ -154,7 +169,7 @@ export async function main() {
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
 
-  if (config.autoSyncGlobalCommands) {
+  if (config.autoSyncGlobalCommands && (!client.shard || client.shard.ids.includes(0))) {
     const markerPaths = [
       '/app/.reset-commands',
       '/home/container/.reset-commands',
