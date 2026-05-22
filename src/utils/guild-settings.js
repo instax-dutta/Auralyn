@@ -2,8 +2,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-export const DEFAULT_SOURCE_PRIORITY = ['direct', 'youtube'];
-export const VALID_SOURCES = new Set(['direct', 'youtube', 'soundcloud']);
+export const DEFAULT_SOURCE_PRIORITY = ['direct', 'spotify', 'youtube'];
+export const VALID_SOURCES = new Set(['direct', 'spotify', 'youtube', 'soundcloud']);
 
 export const defaultGuildSettings = Object.freeze({
   defaultVolume: 70,
