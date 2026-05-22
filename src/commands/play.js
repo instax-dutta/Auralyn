@@ -49,20 +49,47 @@ export default {
           });
         }
 
-        let enqueued = 0;
-        for (const t of tracks) {
-          try {
-            await client.musicPlayer.enqueue({
-              guildId: interaction.guildId,
-              track: t,
-              textChannel: interaction.channel,
-              voiceChannel,
-            });
-            enqueued++;
-          } catch (enqueueError) {
-            client.logger.error(`Failed to enqueue track from playlist: ${t?.info?.title}`, enqueueError);
-          }
-        }
+        const playlistName = playlist.info?.name ?? 'playlist';
+        const total = tracks.length;
+        const requester = {
+          requestedByUserId: interaction.user.id,
+          requestedByName: interaction.member?.displayName ?? interaction.user.username,
+        };
+        const annotated = tracks.map(t => ({ ...t, ...requester }));
+
+        const renderProgress = (enqueued) => buildActionFeedback(
+          'Adding Playlist',
+          `📥 Enqueueing **${playlistName}** — ${enqueued}/${total} tracks added${enqueued < total ? '…' : '.'}`,
+        );
+
+        await interaction.editReply({
+          embeds: [renderProgress(0)],
+          components: [],
+        });
+
+        let lastEditAt = 0;
+        const PROGRESS_EDIT_INTERVAL_MS = 1500;
+
+        const { enqueued, aborted } = await client.musicPlayer.enqueuePlaylist({
+          guildId: interaction.guildId,
+          tracks: annotated,
+          textChannel: interaction.channel,
+          voiceChannel,
+          batchSize: 50,
+          batchDelayMs: 1500,
+          onProgress: async ({ enqueued, total }) => {
+            const now = Date.now();
+            const isFinalBatch = enqueued >= total;
+            if (!isFinalBatch && now - lastEditAt < PROGRESS_EDIT_INTERVAL_MS) return;
+            lastEditAt = now;
+            try {
+              await interaction.editReply({
+                embeds: [renderProgress(enqueued)],
+                components: [],
+              });
+            } catch { /* edit failures are non-fatal */ }
+          },
+        });
 
         if (enqueued === 0) {
           return interaction.editReply({
@@ -74,7 +101,9 @@ export default {
         return interaction.editReply({
           embeds: [buildActionFeedback(
             'Playlist Added',
-            `Enqueued **${enqueued} track${enqueued === 1 ? '' : 's'}** from **${playlist.info?.name ?? 'playlist'}**.`,
+            aborted
+              ? `Added **${enqueued}/${total}** tracks from **${playlistName}** before the session was reset.`
+              : `Enqueued **${enqueued} track${enqueued === 1 ? '' : 's'}** from **${playlistName}**.`,
           )],
           components: [],
         });

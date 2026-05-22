@@ -93,6 +93,75 @@ export class MusicPlayer {
     return state;
   }
 
+  async enqueuePlaylist({
+    guildId,
+    tracks,
+    textChannel,
+    voiceChannel,
+    batchSize = 50,
+    batchDelayMs = 1500,
+    onProgress = null,
+  } = {}) {
+    if (!Array.isArray(tracks) || tracks.length === 0) {
+      return { enqueued: 0, total: 0, aborted: false };
+    }
+
+    const state = this.queueManager.getState(guildId);
+    state.textChannel = textChannel;
+    state.voiceChannel = voiceChannel;
+
+    const settings = await this.getGuildSettings(guildId);
+    if (state.volume !== settings.defaultVolume) {
+      await this.setVolume(guildId, settings.defaultVolume);
+    }
+
+    const total = tracks.length;
+    let enqueued = 0;
+    let playbackKicked = false;
+
+    for (let i = 0; i < total; i += batchSize) {
+      // Abort if the guild session was cleaned up (e.g. /stop or disconnect)
+      if (this.queueManager.getState(guildId) !== state) {
+        this.logger.debug(`Playlist enqueue aborted for guild ${guildId}: session reset`);
+        return { enqueued, total, aborted: true };
+      }
+
+      const batch = tracks.slice(i, i + batchSize);
+      for (const t of batch) {
+        this.queueManager.enqueue(guildId, {
+          ...t,
+          requestedByUserId: t.requestedByUserId ?? null,
+          requestedByName: t.requestedByName ?? null,
+        });
+        enqueued += 1;
+      }
+
+      if (!playbackKicked && !state.isPlaying) {
+        playbackKicked = true;
+        this.logger.debug(`Guild ${guildId} is idle, starting playback (playlist bulk)`);
+        void this.playNext(guildId).catch(err => {
+          this.logger.error(`Playlist playback start failed for guild ${guildId}`, err);
+        });
+      }
+
+      try {
+        await this.persistGuildState(guildId);
+      } catch (err) {
+        this.logger.warn(`Persist failed during playlist enqueue for guild ${guildId}: ${err.message}`);
+      }
+
+      if (onProgress) {
+        try { await onProgress({ enqueued, total }); } catch { /* UI errors are non-fatal */ }
+      }
+
+      if (i + batchSize < total && batchDelayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, batchDelayMs));
+      }
+    }
+
+    return { enqueued, total, aborted: false };
+  }
+
   async getOrCreateLavalinkPlayer(guildId) {
     let player = this.queueManager.getLavalinkPlayer(guildId);
     if (player) return player;

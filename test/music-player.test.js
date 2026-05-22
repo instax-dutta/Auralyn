@@ -194,3 +194,63 @@ test('enqueue and stop persist and clear snapshots when session store is configu
   await musicPlayer.stop('guild');
   assert.deepEqual(sessionDeletes, ['guild']);
 });
+
+test('enqueuePlaylist batches with progress callbacks and starts playback once', async () => {
+  const lavalinkPlayer = new FakeLavalinkPlayer();
+  const musicPlayer = new MusicPlayer(new FakeShoukaku(lavalinkPlayer));
+
+  const tracks = Array.from({ length: 25 }, (_, i) => track(`p${i}`));
+  const progressCalls = [];
+
+  const result = await musicPlayer.enqueuePlaylist({
+    guildId: 'guild',
+    tracks,
+    textChannel: {},
+    voiceChannel: { id: 'voice', guild: { shardId: 0 } },
+    batchSize: 10,
+    batchDelayMs: 0,
+    onProgress: ({ enqueued, total }) => {
+      progressCalls.push({ enqueued, total });
+    },
+  });
+
+  assert.equal(result.total, 25);
+  assert.equal(result.enqueued, 25);
+  assert.equal(result.aborted, false);
+
+  // Progress fires after every batch: 10, 20, 25
+  assert.deepEqual(progressCalls.map(p => p.enqueued), [10, 20, 25]);
+  assert.deepEqual(progressCalls.map(p => p.total), [25, 25, 25]);
+
+  // First track was kicked off for playback
+  await new Promise(r => setTimeout(r, 10));
+  assert.equal(lavalinkPlayer.played[0], 'encoded-p0');
+
+  // Queue depth + current track == total
+  const state = musicPlayer.getState('guild');
+  assert.equal((state.queue?.length ?? 0) + (state.currentTrack ? 1 : 0), 25);
+});
+
+test('enqueuePlaylist aborts gracefully when the guild session is cleaned up', async () => {
+  const musicPlayer = new MusicPlayer(new FakeShoukaku());
+
+  const tracks = Array.from({ length: 30 }, (_, i) => track(`a${i}`));
+
+  const result = await musicPlayer.enqueuePlaylist({
+    guildId: 'guild',
+    tracks,
+    textChannel: {},
+    voiceChannel: { id: 'voice', guild: { shardId: 0 } },
+    batchSize: 10,
+    batchDelayMs: 0,
+    onProgress: async ({ enqueued }) => {
+      // Wipe the guild state mid-load after the first batch
+      if (enqueued === 10) {
+        musicPlayer.queueManager.cleanup('guild');
+      }
+    },
+  });
+
+  assert.equal(result.aborted, true);
+  assert.ok(result.enqueued < 30, 'should not have enqueued all tracks after abort');
+});
