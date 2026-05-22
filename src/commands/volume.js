@@ -5,10 +5,10 @@ export default {
   data: new SlashCommandBuilder()
     .setName('volume')
     .setDescription('Set the player volume (1-100)')
+    .setContexts(InteractionContextType.Guild)
     .addIntegerOption(option =>
       option.setName('volume')
         .setDescription('The volume percentage')
-    .setContexts(InteractionContextType.Guild)
         .setRequired(true)
         .setMinValue(1)
         .setMaxValue(100)),

@@ -5,10 +5,10 @@ export default {
   data: new SlashCommandBuilder()
     .setName('247')
     .setDescription('Toggle 24/7 mode (bot stays in VC even when alone)')
+    .setContexts(InteractionContextType.Guild)
     .addBooleanOption(option =>
       option.setName('enabled')
         .setDescription('Enable or disable 24/7 mode')
-    .setContexts(InteractionContextType.Guild)
         .setRequired(true)),
 
   async execute(interaction, client, shoukaku) {

@@ -5,10 +5,10 @@ export default {
   data: new SlashCommandBuilder()
     .setName('autoplay')
     .setDescription('Toggle autoplay (automatically play related tracks when queue ends)')
+    .setContexts(InteractionContextType.Guild)
     .addBooleanOption(option =>
       option.setName('enabled')
         .setDescription('Enable or disable autoplay')
-    .setContexts(InteractionContextType.Guild)
         .setRequired(true)),
 
   async execute(interaction, client, shoukaku) {
