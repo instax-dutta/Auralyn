@@ -1,4 +1,13 @@
+import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import path from 'node:path';
+
 const REQUIRED_ENV = ['DISCORD_TOKEN', 'CLIENT_ID'];
+
+const DATA_DIR_CANDIDATES = [
+  '/app/data',
+  '/home/container/auralyn-data',
+  '/tmp/auralyn',
+];
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -26,6 +35,27 @@ function optionalNumberEnv(name, fallback) {
   return parsed;
 }
 
+function isWritable(dir) {
+  try {
+    mkdirSync(dir, { recursive: true });
+    const probe = path.join(dir, `.write-probe-${process.pid}`);
+    writeFileSync(probe, '');
+    unlinkSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveDataDir() {
+  const explicit = optionalEnv('DATA_DIR');
+  if (explicit) return explicit;
+  for (const candidate of DATA_DIR_CANDIDATES) {
+    if (isWritable(candidate)) return candidate;
+  }
+  return DATA_DIR_CANDIDATES[DATA_DIR_CANDIDATES.length - 1];
+}
+
 export function loadConfig() {
   for (const name of REQUIRED_ENV) {
     requireEnv(name);
@@ -41,7 +71,7 @@ export function loadConfig() {
     enableDebugCommands: optionalEnv('ENABLE_DEBUG_COMMANDS', 'false') === 'true',
     strictDjMode: optionalEnv('STRICT_DJ_MODE', 'false') === 'true',
     forceResetCommands: optionalEnv('FORCE_RESET_COMMANDS', 'false') === 'true',
-    dataDir: optionalEnv('DATA_DIR', '/app/data'),
+    dataDir: resolveDataDir(),
     lavalink: {
       host: optionalEnv('LAVALINK_HOST', '127.0.0.1'),
       port: optionalNumberEnv('LAVALINK_PORT', 2333),
