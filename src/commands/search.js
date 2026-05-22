@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { formatDuration, trackTitle, trackAuthor } from '../utils/tracks.js';
@@ -95,7 +95,7 @@ export default {
 
       const filter = (btn) => {
         if (btn.user.id !== interaction.user.id) {
-          btn.reply({ content: 'These search results are not yours.', ephemeral: true });
+          btn.reply({ content: 'These search results are not yours.', flags: MessageFlags.Ephemeral });
           return false;
         }
         return true;

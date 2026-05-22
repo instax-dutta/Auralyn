@@ -1,4 +1,4 @@
-import { Events } from 'discord.js';
+import { Events, MessageFlags } from 'discord.js';
 import { buildActionFeedback, buildQueueReply, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
@@ -11,7 +11,7 @@ export default {
       if (!guildId || guildId !== interaction.guildId) {
         await interaction.reply({
           embeds: [buildActionFeedback('Controls', 'These controls belong to a different server session.', false)],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -73,7 +73,7 @@ export default {
       client.logger.error(`Error executing /${interaction.commandName}`, error);
       const reply = {
         embeds: [buildActionFeedback('Command Error', 'There was an error executing this command.', false)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       };
 
       try {

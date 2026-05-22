@@ -6,11 +6,9 @@ export default {
     .setName('ping')
     .setDescription('Check bot latency'),
   async execute(interaction) {
-    await interaction.deferReply();
-    const sent = await interaction.fetchReply();
-
-    const latency = sent.createdTimestamp - interaction.createdTimestamp;
     const wsLatency = interaction.client.ws.ping;
+    await interaction.deferReply();
+    const latency = Date.now() - interaction.createdTimestamp;
 
     const embed = buildPingEmbed({ latency, wsLatency });
     await interaction.editReply({ embeds: [embed] });
