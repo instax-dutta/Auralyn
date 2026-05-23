@@ -126,7 +126,7 @@ export async function main() {
   logger.info('Auralyn bot started successfully');
 }
 
-const guildSyncLimiter = new RateLimiter({ intervalMs: 2000, maxBurst: 5 });
+const guildSyncLimiter = new RateLimiter({ intervalMs: 3000, maxBurst: 3 });
 
 client.on('guildCreate', async (guild) => {
   if (!config.autoSyncGuildCommands) return;

@@ -26,8 +26,12 @@ export class MusicPlayer {
   }
 
   startNowPlayingRefresh(guildId, message) {
+    if (!message?.edit) return;
     this.stopNowPlayingRefresh(guildId);
-    const interval = setInterval(async () => {
+    let consecutiveFails = 0;
+    let currentInterval = 30_000;
+    const MAX_INTERVAL = 120_000;
+    const tick = async () => {
       const state = this.queueManager.getState(guildId);
       if (!state?.isPlaying || !state?.currentTrack) {
         this.stopNowPlayingRefresh(guildId);
@@ -46,17 +50,34 @@ export class MusicPlayer {
             isPaused: state.isPaused,
           }),
         );
+        consecutiveFails = 0;
+        if (currentInterval !== 30_000) {
+          currentInterval = 30_000;
+          this.logger.debug(`nowPlayingRefresh reset to 30s for guild ${guildId}`);
+        }
       } catch {
-        this.stopNowPlayingRefresh(guildId);
+        consecutiveFails += 1;
+        if (consecutiveFails >= 2) {
+          this.logger.warn(`nowPlayingRefresh gave up after ${consecutiveFails} failures for guild ${guildId}`);
+          this.stopNowPlayingRefresh(guildId);
+          return;
+        }
+        currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL);
+        this.logger.debug(`nowPlayingRefresh backed off to ${currentInterval}ms for guild ${guildId}`);
       }
-    }, 15_000);
-    this.nowPlayingMessages.set(guildId, { message, interval });
+      const entry = this.nowPlayingMessages.get(guildId);
+      if (entry) {
+        clearTimeout(entry.timer);
+        entry.timer = setTimeout(tick, currentInterval);
+      }
+    };
+    this.nowPlayingMessages.set(guildId, { message, timer: setTimeout(tick, currentInterval) });
   }
 
   stopNowPlayingRefresh(guildId) {
     const entry = this.nowPlayingMessages.get(guildId);
     if (entry) {
-      clearInterval(entry.interval);
+      clearTimeout(entry.timer);
       this.nowPlayingMessages.delete(guildId);
     }
   }

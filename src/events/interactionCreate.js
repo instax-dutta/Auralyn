@@ -4,8 +4,16 @@ import { AuralynColors } from '../utils/embeds.js';
 import { LOOP_OFF, LOOP_TRACK, LOOP_QUEUE } from '../music/queue.js';
 
 const LOOP_CYCLE = [LOOP_TRACK, LOOP_QUEUE, LOOP_OFF];
+const lastPatchTime = new Map();
 
-function patchV2(client, channelId, messageId, payload) {
+function patchV2(client, channelId, messageId, payload, guildId) {
+  const now = Date.now();
+  const key = `${guildId}:${messageId}`;
+  const last = lastPatchTime.get(key) ?? 0;
+  if (now - last < 1_000) {
+    return Promise.resolve();
+  }
+  lastPatchTime.set(key, now);
   return client.rest.patch(Routes.channelMessage(channelId, messageId), {
     body: {
       flags: payload.flags,
@@ -58,6 +66,7 @@ export default {
           await client.musicPlayer.stop(guildId);
           await patchV2(client, channelId, messageId,
             buildSimpleV2('Auralyn | Playback Stopped', 'Queue cleared and voice session closed.', AuralynColors.success),
+            guildId,
           );
           return;
         } else {
@@ -66,10 +75,11 @@ export default {
 
         const state = client.musicPlayer.getPlayerState(guildId);
         if (state.currentTrack) {
-          await patchV2(client, channelId, messageId, buildNowPlayingV2(client, guildId));
+          await patchV2(client, channelId, messageId, buildNowPlayingV2(client, guildId), guildId);
         } else {
           await patchV2(client, channelId, messageId,
             buildSimpleV2('Auralyn | Queue Updated', 'Nothing is currently playing. Use `/play` to start a session.', AuralynColors.info),
+            guildId,
           );
         }
       } catch (error) {
@@ -77,6 +87,7 @@ export default {
         try {
           await patchV2(client, channelId, messageId,
             buildSimpleV2('Auralyn | Controls', 'Auralyn ran into a playback issue while handling that control.', AuralynColors.error),
+            guildId,
           );
         } catch { /* ignore secondary failure */ }
       }

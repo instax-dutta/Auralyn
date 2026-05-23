@@ -1,6 +1,7 @@
 import { REST, Routes } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from '../config.js';
@@ -10,6 +11,12 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let lastCommandHash = null;
+
+function hashCommands(commands) {
+  return createHash('sha256').update(JSON.stringify(commands)).digest('hex');
+}
 
 export async function loadCommandPayloads() {
   const commands = [];
@@ -39,7 +46,25 @@ export function getCommandDeploymentTargets(config) {
 export async function deployCommands(config = loadConfig()) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
-  const rest = new REST({ version: '10' }).setToken(config.discordToken);
+  const hash = hashCommands(commands);
+
+  if (lastCommandHash === hash) {
+    logger.info('Commands unchanged since last deploy — skipping.');
+    return;
+  }
+
+  const rest = new REST({ version: '10', makeRequest: (url, options) => {
+    const retries = options.retries ?? 0;
+    return fetch(url, { ...options, headers: { ...options.headers, 'X-RateLimit-Precision': 'millisecond' } }).then(res => {
+      if (res.status === 429 && retries < 3) {
+        return new Promise(resolve => {
+          setTimeout(() => resolve(rest.makeRequest(url, { ...options, retries: retries + 1 })), (res.headers.get('Retry-After') ?? 1) * 1000);
+        });
+      }
+      return res;
+    });
+  } }).setToken(config.discordToken);
+
   const targets = getCommandDeploymentTargets(config);
 
   logger.info(`Refreshing ${commands.length} application commands.`);
@@ -64,17 +89,27 @@ export async function deployCommands(config = loadConfig()) {
       logger.warn(`Skipping guild ${target.guildId}: ${err.message}`);
     }
   }
+
+  lastCommandHash = hash;
 }
 
-export async function deployCommandsForGuild(config, guildId) {
+export async function deployCommandsForGuild(config, guildId, force = false) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
+  const hash = hashCommands(commands);
+
+  if (!force && lastCommandHash === hash) {
+    logger.debug(`Skipping guild ${guildId} deploy — commands unchanged.`);
+    return;
+  }
+
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
   const data = await rest.put(
     Routes.applicationGuildCommands(config.clientId, guildId),
     { body: commands },
   );
   logger.info(`Registered ${data.length} guild commands for ${guildId}.`);
+  if (!lastCommandHash) lastCommandHash = hash;
 }
 
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
