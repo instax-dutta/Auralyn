@@ -1,77 +1,41 @@
-import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
-import { buildActionFeedback } from '../utils/music-ui.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
+import { parseTimeInput } from '../utils/formatters.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('seek')
-    .setDescription('Seek to a specific position in the current track')
-    .setContexts(InteractionContextType.Guild)
-    .addIntegerOption(option =>
+    .setDescription('Jump to a position in the current track')
+    .addStringOption(option =>
       option.setName('position')
-        .setDescription('Target position in seconds')
-        .setRequired(true)
-        .setMinValue(0)),
+        .setDescription('Timestamp to seek to — e.g. 1:30 or 90')
+        .setRequired(true)),
 
-  async execute(interaction, client, shoukaku) {
+  async execute(interaction, client) {
     await interaction.deferReply();
 
-    if (!interaction.member.voice.channel) {
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before seeking.', false)],
-        components: [],
-      });
+    const state = client.musicPlayer.getPlayerState(interaction.guildId);
+
+    if (!state.isPlaying) {
+      return interaction.editReply(buildActionFeedback('Nothing Playing', 'There is nothing playing to seek in.', false));
+    }
+
+    if (state.currentTrack?.info?.isStream) {
+      return interaction.editReply(buildActionFeedback('Not Seekable', 'Live streams cannot be seeked.', false));
+    }
+
+    const input = interaction.options.getString('position');
+    const positionMs = parseTimeInput(input);
+
+    if (positionMs === null) {
+      return interaction.editReply(buildActionFeedback('Invalid Position', 'Use a format like `1:30`, `0:45`, or `90` (seconds).', false));
     }
 
     try {
-      const position = interaction.options.getInteger('position');
-      const player = client.musicPlayer.getState(interaction.guildId).lavalinkPlayer;
-
-      if (!player) {
-        return interaction.editReply({
-          embeds: [buildActionFeedback('No Session', 'There is no active playback session.', false)],
-          components: [],
-        });
-      }
-
-      const currentTrack = client.musicPlayer.getCurrentTrack(interaction.guildId);
-      if (!currentTrack) {
-        return interaction.editReply({
-          embeds: [buildActionFeedback('No Track', 'Nothing is currently playing.', false)],
-          components: [],
-        });
-      }
-
-      const trackLength = currentTrack.info?.length ?? 0;
-      const seekMs = position * 1000;
-
-      if (seekMs > trackLength) {
-        return interaction.editReply({
-          embeds: [buildActionFeedback('Invalid Position', `The track is only ${Math.floor(trackLength / 1000)} seconds long.`, false)],
-          components: [],
-        });
-      }
-
-      await player.seekTo(seekMs);
-
-      const formatTime = (totalSeconds) => {
-        const mins = Math.floor(totalSeconds / 60);
-        const secs = totalSeconds % 60;
-        return `${mins}:${String(secs).padStart(2, '0')}`;
-      };
-
-      return interaction.editReply({
-        embeds: [buildActionFeedback(
-          'Seeked',
-          `Jumped to **${formatTime(position)}** / ${formatTime(Math.floor(trackLength / 1000))}.`,
-        )],
-        components: [],
-      });
+      await client.musicPlayer.seek(interaction.guildId, positionMs);
+      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Seeked');
     } catch (error) {
-      client.logger.error('Error in seek command', error);
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Seek Failed', 'There was an error while seeking.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Seek Failed', error.message, false));
     }
   },
 };

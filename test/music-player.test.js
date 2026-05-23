@@ -71,13 +71,13 @@ test('skip advances to exactly the next track', async () => {
   await musicPlayer.enqueue({
     guildId: 'guild',
     track: track('one'),
-    textChannel: {},
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
   await musicPlayer.enqueue({
     guildId: 'guild',
     track: track('two'),
-    textChannel: {},
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
 
@@ -95,13 +95,13 @@ test('queue loop re-adds finished tracks after the remaining queue', async () =>
   await musicPlayer.enqueue({
     guildId: 'guild',
     track: track('one'),
-    textChannel: {},
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
   await musicPlayer.enqueue({
     guildId: 'guild',
     track: track('two'),
-    textChannel: {},
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
 
@@ -110,7 +110,8 @@ test('queue loop re-adds finished tracks after the remaining queue', async () =>
 
   assert.deepEqual(lavalinkPlayer.played, ['encoded-one', 'encoded-two']);
   assert.equal(musicPlayer.getCurrentTrack('guild').info.title, 'Track two');
-  assert.deepEqual(musicPlayer.getQueue('guild').map((item) => item.info.title), ['Track one']);
+  const queue = musicPlayer.getQueue('guild');
+  assert.deepEqual(queue.map((item) => item.info.title), ['Track one']);
 });
 
 test('remove uses one-based queue positions', async () => {
@@ -119,13 +120,13 @@ test('remove uses one-based queue positions', async () => {
   await musicPlayer.enqueue({
     guildId: 'guild',
     track: track('one'),
-    textChannel: {},
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
   await musicPlayer.enqueue({
     guildId: 'guild',
     track: track('two'),
-    textChannel: {},
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
 
@@ -153,7 +154,7 @@ test('enqueue applies default guild volume and preserves requester metadata', as
       requestedByUserId: 'user-1',
       requestedByName: 'R4C3R',
     },
-    textChannel: { id: 'text-1' },
+    textChannel: { id: 'text-1', send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
 
@@ -183,7 +184,7 @@ test('enqueue and stop persist and clear snapshots when session store is configu
       ...track('one'),
       requestedByUserId: 'user-1',
     },
-    textChannel: { id: 'text-1' },
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
 
@@ -195,62 +196,21 @@ test('enqueue and stop persist and clear snapshots when session store is configu
   assert.deepEqual(sessionDeletes, ['guild']);
 });
 
-test('enqueuePlaylist batches with progress callbacks and starts playback once', async () => {
+test('enqueuePlaylist enqueues all tracks and starts playback when idle', async () => {
   const lavalinkPlayer = new FakeLavalinkPlayer();
   const musicPlayer = new MusicPlayer(new FakeShoukaku(lavalinkPlayer));
 
-  const tracks = Array.from({ length: 25 }, (_, i) => track(`p${i}`));
-  const progressCalls = [];
+  const tracks = Array.from({ length: 10 }, (_, i) => track(`p${i}`));
 
-  const result = await musicPlayer.enqueuePlaylist({
+  await musicPlayer.enqueuePlaylist({
     guildId: 'guild',
     tracks,
-    textChannel: {},
+    textChannel: { send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
-    batchSize: 10,
-    batchDelayMs: 0,
-    onProgress: ({ enqueued, total }) => {
-      progressCalls.push({ enqueued, total });
-    },
   });
 
-  assert.equal(result.total, 25);
-  assert.equal(result.enqueued, 25);
-  assert.equal(result.aborted, false);
-
-  // Progress fires after every batch: 10, 20, 25
-  assert.deepEqual(progressCalls.map(p => p.enqueued), [10, 20, 25]);
-  assert.deepEqual(progressCalls.map(p => p.total), [25, 25, 25]);
-
-  // First track was kicked off for playback
-  await new Promise(r => setTimeout(r, 10));
   assert.equal(lavalinkPlayer.played[0], 'encoded-p0');
 
-  // Queue depth + current track == total
-  const state = musicPlayer.getState('guild');
-  assert.equal((state.queue?.length ?? 0) + (state.currentTrack ? 1 : 0), 25);
-});
-
-test('enqueuePlaylist aborts gracefully when the guild session is cleaned up', async () => {
-  const musicPlayer = new MusicPlayer(new FakeShoukaku());
-
-  const tracks = Array.from({ length: 30 }, (_, i) => track(`a${i}`));
-
-  const result = await musicPlayer.enqueuePlaylist({
-    guildId: 'guild',
-    tracks,
-    textChannel: {},
-    voiceChannel: { id: 'voice', guild: { shardId: 0 } },
-    batchSize: 10,
-    batchDelayMs: 0,
-    onProgress: async ({ enqueued }) => {
-      // Wipe the guild state mid-load after the first batch
-      if (enqueued === 10) {
-        musicPlayer.queueManager.cleanup('guild');
-      }
-    },
-  });
-
-  assert.equal(result.aborted, true);
-  assert.ok(result.enqueued < 30, 'should not have enqueued all tracks after abort');
+  const state = musicPlayer.getPlayerState('guild');
+  assert.equal((state.queue?.length ?? 0) + (state.currentTrack ? 1 : 0), 10);
 });

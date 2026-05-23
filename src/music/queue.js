@@ -1,12 +1,11 @@
 import { createSilentLogger } from '../utils/logger.js';
+import { DEFAULT_FILTER } from '../utils/audio-filters.js';
 
 const LOOP_OFF = 0;
 const LOOP_TRACK = 1;
 const LOOP_QUEUE = 2;
 
 export { LOOP_OFF, LOOP_TRACK, LOOP_QUEUE };
-
-const MAX_HISTORY = 10;
 
 export class QueueManager {
   constructor(logger = createSilentLogger()) {
@@ -18,12 +17,14 @@ export class QueueManager {
     if (!this.players.has(guildId)) {
       this.players.set(guildId, {
         queue: [],
-        history: [],
         currentTrack: null,
+        history: [],
         isPlaying: false,
         isPaused: false,
         volume: 70,
         loopMode: LOOP_OFF,
+        filterPreset: DEFAULT_FILTER,
+        autoplay: false,
         textChannel: null,
         voiceChannel: null,
         lavalinkPlayer: null,
@@ -36,15 +37,14 @@ export class QueueManager {
   enqueue(guildId, track) {
     const state = this.getState(guildId);
     state.queue.push(track);
-    this.logger.debug(`Enqueued track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
+    this.logger.info(`Enqueued: ${track?.info?.title ?? 'unknown'}`);
     return state;
   }
 
-  enqueueFront(guildId, track) {
+  enqueueBulk(guildId, tracks) {
     const state = this.getState(guildId);
-    state.queue.unshift(track);
-    this.logger.debug(`Prepended track for guild ${guildId}: ${track?.info?.title ?? 'unknown'}`);
-    return state;
+    state.queue.push(...tracks);
+    this.logger.info(`Enqueued ${tracks.length} tracks`);
   }
 
   getNextTrack(state) {
@@ -52,11 +52,6 @@ export class QueueManager {
       return state.currentTrack;
     }
     return state.queue.shift() ?? null;
-  }
-
-  skip(guildId) {
-    const state = this.getState(guildId);
-    return this.getNextTrack(state);
   }
 
   shuffle(guildId) {
@@ -77,16 +72,15 @@ export class QueueManager {
     return state.queue.splice(index, 1)[0] ?? null;
   }
 
-  removeBefore(guildId, position) {
+  move(guildId, from, to) {
     const state = this.getState(guildId);
-    const index = position - 1;
-    if (index < 0 || index >= state.queue.length) return;
-    state.queue.splice(0, index);
-  }
-
-  clearQueue(guildId) {
-    const state = this.getState(guildId);
-    state.queue = [];
+    const fromIndex = from - 1;
+    const toIndex = to - 1;
+    if (fromIndex < 0 || fromIndex >= state.queue.length) return null;
+    if (toIndex < 0 || toIndex >= state.queue.length) return null;
+    const [track] = state.queue.splice(fromIndex, 1);
+    state.queue.splice(toIndex, 0, track);
+    return track;
   }
 
   setLoopMode(guildId, mode) {
@@ -173,33 +167,55 @@ export class QueueManager {
     this.getState(guildId).listeners = listeners;
   }
 
-  onTrackEnd(guildId) {
+  pushToHistory(guildId, track) {
+    if (!track) return;
     const state = this.getState(guildId);
-    if (state.loopMode === LOOP_QUEUE && state.currentTrack) {
-      state.queue.push(state.currentTrack);
-    }
-  }
-
-  pushHistory(guildId) {
-    const state = this.getState(guildId);
-    if (!state.currentTrack) return;
-    state.history.push(state.currentTrack);
-    if (state.history.length > MAX_HISTORY) {
-      state.history.shift();
-    }
-  }
-
-  popHistory(guildId) {
-    const state = this.getState(guildId);
-    return state.history.pop() ?? null;
+    state.history.unshift(track);
+    if (state.history.length > 10) state.history.pop();
   }
 
   getHistory(guildId) {
     return this.getState(guildId).history;
   }
 
+  clearQueue(guildId) {
+    this.getState(guildId).queue = [];
+  }
+
+  jumpTo(guildId, position) {
+    const state = this.getState(guildId);
+    const index = position - 1;
+    if (index < 0 || index >= state.queue.length) return false;
+    state.queue.splice(0, index);
+    return true;
+  }
+
+  onTrackEnd(guildId) {
+    const state = this.getState(guildId);
+    if (state.currentTrack) this.pushToHistory(guildId, state.currentTrack);
+    if (state.loopMode === LOOP_QUEUE && state.currentTrack) {
+      state.queue.push(state.currentTrack);
+    }
+  }
+
   cleanup(guildId) {
     this.players.delete(guildId);
+  }
+
+  getFilterPreset(guildId) {
+    return this.getState(guildId).filterPreset;
+  }
+
+  setFilterPreset(guildId, preset) {
+    this.getState(guildId).filterPreset = preset;
+  }
+
+  getAutoplay(guildId) {
+    return this.getState(guildId).autoplay;
+  }
+
+  setAutoplay(guildId, enabled) {
+    this.getState(guildId).autoplay = enabled;
   }
 
   getSnapshot(guildId) {
@@ -211,6 +227,8 @@ export class QueueManager {
       isPaused: state.isPaused,
       volume: state.volume,
       loopMode: state.loopMode,
+      filterPreset: state.filterPreset,
+      autoplay: state.autoplay,
     };
   }
 }

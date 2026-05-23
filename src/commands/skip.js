@@ -1,64 +1,48 @@
-import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
+
+const VOTESKIP_THRESHOLD = 3;
+
+function hasDjRole(member, config) {
+  return Boolean(config?.djRoleId && member.roles.cache.has(config.djRoleId));
+}
 
 export default {
   data: new SlashCommandBuilder()
     .setName('skip')
-    .setDescription('Skip the current track')
-    .setContexts(InteractionContextType.Guild),
+    .setDescription('Skip the current track'),
 
-  async execute(interaction, client, shoukaku) {
+  async execute(interaction, client) {
     await interaction.deferReply();
 
-    if (!interaction.member.voice.channel) {
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before skipping tracks.', false)],
-        components: [],
-      });
+    const voiceChannel = interaction.member?.voice?.channel;
+    if (!voiceChannel) {
+      return interaction.editReply(buildActionFeedback('Voice Required', 'Join a voice channel before skipping tracks.', false));
+    }
+
+    const state = client.musicPlayer.getPlayerState(interaction.guildId);
+    if (!state.isPlaying) {
+      return interaction.editReply(buildActionFeedback('Nothing Playing', 'There is nothing playing to skip.', false));
+    }
+
+    const humanCount = voiceChannel.members.filter(m => !m.user.bot).size;
+    if (humanCount > VOTESKIP_THRESHOLD && !hasDjRole(interaction.member, client.config)) {
+      return interaction.editReply(buildActionFeedback(
+        'Vote Required',
+        `There are **${humanCount}** members in the voice channel. Use \`/voteskip\` to start a vote, or ask a DJ to force skip.`,
+        false,
+      ));
     }
 
     try {
-      const settings = await client.musicPlayer.getGuildSettings(interaction.guildId);
-
-      if (settings.voteSkipEnabled && !interaction.member.permissions.has('ManageMessages')) {
-        const channel = interaction.member.voice.channel;
-        const listeners = channel.members.filter(m => !m.user.bot && m.id !== client.user.id);
-        const totalListeners = listeners.size;
-
-        if (totalListeners > 1) {
-          const voteSet = client.musicPlayer.getVoteSkipSet(interaction.guildId);
-          voteSet.add(interaction.user.id);
-
-          const currentVotes = voteSet.size;
-          const needed = Math.max(1, Math.ceil((totalListeners * settings.voteSkipThreshold) / 100));
-
-          if (currentVotes < needed) {
-            return interaction.editReply({
-              embeds: [buildActionFeedback(
-                'Vote Skip',
-                `Vote registered (${currentVotes}/${needed}). ${needed - currentVotes} more vote(s) needed to skip.`,
-                false,
-              )],
-              components: [],
-            });
-          }
-        }
-      }
-
       const nextTrack = await client.musicPlayer.skip(interaction.guildId);
       if (!nextTrack) {
-        return interaction.editReply({
-          embeds: [buildActionFeedback('Skip', 'There is nothing to skip right now.', false)],
-          components: [],
-        });
+        return interaction.editReply(buildActionFeedback('Skip', 'There is nothing to skip right now.', false));
       }
       return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Track Skipped');
     } catch (error) {
       client.logger.error('Error in skip command', error);
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Skip Failed', 'There was an error while trying to skip the track.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Skip Failed', 'There was an error while trying to skip the track.', false));
     }
   },
 };

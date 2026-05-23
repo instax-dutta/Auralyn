@@ -1,7 +1,6 @@
 import { REST, Routes } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
-import { createHash } from 'node:crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from '../config.js';
@@ -11,27 +10,6 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-function hashCommands(commands) {
-  return createHash('sha256').update(JSON.stringify(commands)).digest('hex');
-}
-
-function readStoredHash(hashPath) {
-  try {
-    return fs.readFileSync(hashPath, 'utf8').trim();
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredHash(hashPath, hash, logger) {
-  try {
-    fs.mkdirSync(path.dirname(hashPath), { recursive: true });
-    fs.writeFileSync(hashPath, hash);
-  } catch (err) {
-    logger.warn(`Could not persist commands hash to ${hashPath}: ${err.message}`);
-  }
-}
 
 export async function loadCommandPayloads() {
   const commands = [];
@@ -52,58 +30,19 @@ export async function loadCommandPayloads() {
 }
 
 export function getCommandDeploymentTargets(config) {
-  const guildIds = new Set();
-  if (config.guildId) guildIds.add(config.guildId);
-  for (const guildId of config.guildIds ?? []) {
-    if (guildId) guildIds.add(guildId);
+  if (config.guildId) {
+    return [{ scope: 'guild', clientId: config.clientId, guildId: config.guildId }];
   }
-
-  if (guildIds.size > 0) {
-    return [...guildIds].map(guildId => ({
-      scope: 'guild',
-      clientId: config.clientId,
-      guildId,
-    }));
-  }
-
-  return [
-    { scope: 'global', clientId: config.clientId },
-  ];
+  return [{ scope: 'global', clientId: config.clientId }];
 }
 
-export async function deployCommands(config = loadConfig(), { reset = false, hashPath = null, force = false } = {}) {
+export async function deployCommands(config = loadConfig()) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
-  const rest = new REST({ version: '10' }).setToken(config.discordToken);
-
-  if (reset) {
-    logger.info('RESET requested — clearing all commands from all scopes first.');
-    const resetTargets = getAllScopes(config);
-    for (const target of resetTargets) {
-      if (target.scope === 'global') {
-        await rest.put(Routes.applicationCommands(target.clientId), { body: [] });
-        logger.debug('Cleared global commands.');
-      } else {
-        await rest.put(Routes.applicationGuildCommands(target.clientId, target.guildId), { body: [] });
-        logger.debug(`Cleared guild commands for ${target.guildId}.`);
-      }
-    }
-    logger.debug('Reset complete. Now re-registering commands...');
-  }
-
   const commands = await loadCommandPayloads();
+  const rest = new REST({ version: '10' }).setToken(config.discordToken);
   const targets = getCommandDeploymentTargets(config);
-  const commandHash = hashCommands(commands);
 
-  if (hashPath && !reset && !force) {
-    const stored = readStoredHash(hashPath);
-    if (stored === commandHash) {
-      logger.info(`Commands unchanged since last deploy (hash=${commandHash.slice(0, 8)}); skipping sync to preserve daily rate limit.`);
-      return;
-    }
-  }
-
-  const names = commands.map(c => c.name).sort();
-  logger.info(`Refreshing ${commands.length} application commands: ${names.join(', ')}`);
+  logger.info(`Refreshing ${commands.length} application commands.`);
 
   for (const target of targets) {
     if (target.scope === 'global') {
@@ -115,29 +54,16 @@ export async function deployCommands(config = loadConfig(), { reset = false, has
       continue;
     }
 
-    const data = await rest.put(
-      Routes.applicationGuildCommands(target.clientId, target.guildId),
-      { body: commands },
-    );
-    logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
+    try {
+      const data = await rest.put(
+        Routes.applicationGuildCommands(target.clientId, target.guildId),
+        { body: commands },
+      );
+      logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
+    } catch (err) {
+      logger.warn(`Skipping guild ${target.guildId}: ${err.message}`);
+    }
   }
-
-  if (hashPath) {
-    writeStoredHash(hashPath, commandHash, logger);
-  }
-}
-
-export function getAllScopes(config) {
-  const targets = [{ scope: 'global', clientId: config.clientId }];
-  const guildIds = new Set();
-  if (config.guildId) guildIds.add(config.guildId);
-  for (const guildId of config.guildIds ?? []) {
-    if (guildId) guildIds.add(guildId);
-  }
-  for (const guildId of guildIds) {
-    targets.push({ scope: 'guild', clientId: config.clientId, guildId });
-  }
-  return targets;
 }
 
 export async function deployCommandsForGuild(config, guildId) {
@@ -151,21 +77,12 @@ export async function deployCommandsForGuild(config, guildId) {
   logger.info(`Registered ${data.length} guild commands for ${guildId}.`);
 }
 
-const isMainModule = process.argv[1]
-  && (import.meta.url === pathToFileURL(process.argv[1]).href
-    || process.argv[1].endsWith('deploy-commands.js'));
+const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMainModule) {
-  const shouldReset = process.argv.includes('--reset');
-  const shouldForce = process.argv.includes('--force');
-  deployCommands(undefined, { reset: shouldReset, force: shouldForce })
-    .then(() => {
-      process.stdout.write('[deploy-commands] Done — exiting.\n');
-      process.exit(0);
-    })
-    .catch(error => {
-      const logger = createLogger({ level: process.env.LOG_LEVEL ?? 'info', scope: 'deploy' });
-      logger.error('Failed to deploy commands', error);
-      process.exit(1);
-    });
+  deployCommands().catch(error => {
+    const logger = createLogger({ level: process.env.LOG_LEVEL ?? 'info', scope: 'deploy' });
+    logger.error('Failed to deploy commands', error);
+    process.exit(1);
+  });
 }

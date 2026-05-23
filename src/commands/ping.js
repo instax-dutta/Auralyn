@@ -1,17 +1,23 @@
-import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
-import { buildPingEmbed } from '../utils/embeds.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { AuralynColors } from '../utils/embeds.js';
+import { buildSimpleV2 } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Check bot latency')
-    .setContexts(InteractionContextType.Guild),
+    .setDescription('Check bot latency'),
   async execute(interaction) {
-    const wsLatency = interaction.client.ws.ping;
     await interaction.deferReply();
-    const latency = Date.now() - interaction.createdTimestamp;
+    const sent = await interaction.fetchReply();
 
-    const embed = buildPingEmbed({ latency, wsLatency });
-    await interaction.editReply({ embeds: [embed] });
+    const latency = sent.createdTimestamp - interaction.createdTimestamp;
+    const wsLatency = interaction.client.ws.ping;
+
+    let color = AuralynColors.success;
+    if (latency > 200) color = AuralynColors.warning;
+    if (latency > 500) color = AuralynColors.error;
+
+    const detail = `API Latency: \`${latency}ms\`\nWebSocket: \`${wsLatency}ms\`\nBot: Online`;
+    await interaction.editReply(buildSimpleV2('Auralyn | Status', detail, color));
   },
 };

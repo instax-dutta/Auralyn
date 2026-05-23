@@ -1,14 +1,22 @@
-import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
-import { replyWithPlayerSnapshot } from '../utils/music-ui.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { buildNowPlayingV2, buildSimpleV2 } from '../utils/music-ui.js';
+import { AuralynColors } from '../utils/embeds.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('nowplaying')
-    .setDescription('Show the currently playing track')
-    .setContexts(InteractionContextType.Guild),
+    .setDescription('Show the currently playing track with progress'),
 
-  async execute(interaction, client, shoukaku) {
+  async execute(interaction, client) {
     await interaction.deferReply();
-    return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Now Playing');
+
+    const state = client.musicPlayer.getPlayerState(interaction.guildId);
+    if (!state.isPlaying || !state.currentTrack) {
+      return interaction.editReply(buildSimpleV2('Auralyn | Now Playing', 'Nothing is playing right now. Use `/play` to start a session.', AuralynColors.info));
+    }
+
+    const msg = await interaction.editReply(buildNowPlayingV2(client, interaction.guildId));
+    client.musicPlayer.startNowPlayingRefresh(interaction.guildId, msg);
+    return msg;
   },
 };

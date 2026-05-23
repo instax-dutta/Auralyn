@@ -1,21 +1,63 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, InteractionContextType, MessageFlags, SlashCommandBuilder } from 'discord.js';
-import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
-import { defaultGuildSettings } from '../utils/guild-settings.js';
-import { formatDuration, trackTitle, trackAuthor } from '../utils/tracks.js';
+import {
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  ContainerBuilder,
+  TextDisplayBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MessageFlags,
+  ComponentType,
+} from 'discord.js';
+import { LoadType } from 'shoukaku';
+import { buildActionFeedback, buildNowPlayingV2, buildPlayCommandReply } from '../utils/music-ui.js';
+import { formatDuration } from '../utils/tracks.js';
+import { AuralynColors } from '../utils/embeds.js';
 
-function searchPrefix(source) {
-  const map = { youtube: 'ytsearch', spotify: 'spsearch', soundcloud: 'scsearch' };
-  return map[source] ?? 'ytsearch';
+const RESULT_LIMIT = 5;
+const SELECTION_TIMEOUT_MS = 30_000;
+
+function buildSearchV2(query, tracks) {
+  const body = tracks
+    .map((track, i) => {
+      const title = track.info.title ?? 'Unknown';
+      const author = track.info.author ?? 'Unknown';
+      const duration = track.info.isStream ? '🔴 Live' : formatDuration(track.info.length);
+      const uri = track.info.uri;
+      const linked = uri ? `[${title}](${uri})` : title;
+      return `\`${i + 1}.\` ${linked}\n-# ${author} · ${duration}`;
+    })
+    .join('\n\n');
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('auralyn:search-pick')
+    .setPlaceholder('Choose a track...')
+    .addOptions(tracks.map((track, i) => ({
+      label: (track.info.title ?? 'Unknown').slice(0, 100),
+      description: `${(track.info.author ?? 'Unknown').slice(0, 50)} · ${track.info.isStream ? 'Live' : formatDuration(track.info.length)}`,
+      value: String(i),
+    })));
+
+  const container = new ContainerBuilder()
+    .setAccentColor(AuralynColors.primary)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('### Auralyn | Search Results'))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${query}**`))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(body))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('-# Select a track below — expires in 30s.'))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(select));
+
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 export default {
   data: new SlashCommandBuilder()
     .setName('search')
-    .setDescription('Search for a track and pick from results')
-    .setContexts(InteractionContextType.Guild)
+    .setDescription('Search for a song and pick from the top results')
     .addStringOption(option =>
       option.setName('query')
-        .setDescription('Search terms')
+        .setDescription('Song name or search terms')
         .setRequired(true)),
 
   async execute(interaction, client, shoukaku) {
@@ -25,146 +67,80 @@ export default {
     const voiceChannel = interaction.member.voice.channel;
 
     if (!voiceChannel) {
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before searching.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Voice Required', 'Join a voice channel before searching.', false));
     }
 
+    const botVoiceChannelId = interaction.guild.members.me?.voice.channelId;
+    if (botVoiceChannelId && botVoiceChannelId !== voiceChannel.id) {
+      return interaction.editReply(buildActionFeedback('Voice Session Locked', 'Auralyn is already in a different voice channel.', false));
+    }
+
+    const node = shoukaku.getIdealNode();
+    if (!node) {
+      return interaction.editReply(buildActionFeedback('Unavailable', 'No audio server is available right now.', false));
+    }
+
+    let tracks;
     try {
-      const settings = await client.musicPlayer.getGuildSettings(interaction.guildId);
-      const source = settings?.sourcePriority?.[0] ?? 'youtube';
-      const prefix = searchPrefix(source);
-
-      const node = shoukaku.getIdealNode();
-      if (!node) {
-        return interaction.editReply({
-          embeds: [buildActionFeedback('No Node', 'No Lavalink node is available.', false)],
-          components: [],
-        });
+      const result = await node.rest.resolve(`ytsearch:${query}`);
+      if (!result || result.loadType !== LoadType.SEARCH || !result.data?.length) {
+        return interaction.editReply(buildActionFeedback('No Results', `No results found for **${query}**.`, false));
       }
-
-      const result = await node.rest.resolve(`${prefix}:${query.trim()}`);
-      if (!result || result.loadType !== 'search' || !result.data?.length) {
-        return interaction.editReply({
-          embeds: [buildActionFeedback('No Results', `No results found for "${query}".`, false)],
-          components: [],
-        });
-      }
-
-      const tracks = result.data.slice(0, 5);
-      const description = tracks.map((track, i) =>
-        `**${i + 1}.** ${trackTitle(track)} — ${trackAuthor(track)} \`${formatDuration(track.info?.length)}\``,
-      ).join('\n');
-
-      const embed = {
-        color: 0x6B4EFF,
-        title: 'Search Results',
-        description,
-        footer: { text: `Source: ${source} • Click a button to play` },
-        timestamp: new Date().toISOString(),
-      };
-
-      const rows = [];
-      for (let i = 0; i < tracks.length; i += 3) {
-        const chunk = tracks.slice(i, i + 3);
-        rows.push(
-          new ActionRowBuilder().addComponents(
-            chunk.map((_, j) =>
-              new ButtonBuilder()
-                .setCustomId(`search:${interaction.guildId}:${i + j}`)
-                .setLabel(`${i + j + 1}`)
-                .setStyle(ButtonStyle.Primary),
-            ),
-          ),
-        );
-      }
-
-      rows.push(
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`search:cancel:${interaction.guildId}`)
-            .setLabel('Cancel')
-            .setStyle(ButtonStyle.Secondary),
-        ),
-      );
-
-      const reply = await interaction.editReply({
-        embeds: [embed],
-        components: rows,
-      });
-
-      const filter = (btn) => {
-        if (btn.user.id !== interaction.user.id) {
-          btn.reply({ content: 'These search results are not yours.', flags: MessageFlags.Ephemeral });
-          return false;
-        }
-        return true;
-      };
-
-      const collector = reply.createMessageComponentCollector({ filter, time: 30000, max: 1 });
-
-      collector.on('collect', async (btn) => {
-        const parts = btn.customId.split(':');
-        const action = parts[1];
-
-        if (action === 'cancel') {
-          await btn.update({
-            embeds: [buildActionFeedback('Search Cancelled', 'Search was cancelled.', false)],
-            components: [],
-          });
-          return;
-        }
-
-        const index = parseInt(parts[2], 10);
-        const track = tracks[index];
-        if (!track) {
-          await btn.update({
-            embeds: [buildActionFeedback('Invalid Selection', 'That selection is no longer available.', false)],
-            components: [],
-          });
-          return;
-        }
-
-        await btn.deferUpdate();
-
-        const wasIdle = !client.musicPlayer.getPlayerState(interaction.guildId).isPlaying;
-        await client.musicPlayer.enqueue({
-          guildId: interaction.guildId,
-          track,
-          textChannel: interaction.channel,
-          voiceChannel,
-        });
-
-        await interaction.editReply(
-          buildPlayCommandReply({
-            interaction,
-            client,
-            guildId: interaction.guildId,
-            addedTrack: track,
-            startedPlayback: wasIdle,
-          }),
-        );
-      });
-
-      collector.on('end', async (collected) => {
-        if (collected.size === 0) {
-          try {
-            await interaction.editReply({
-              embeds: [buildActionFeedback('Search Expired', 'Search results expired.', false)],
-              components: [],
-            });
-          } catch {
-            /* ignore */
-          }
-        }
-      });
+      tracks = result.data.slice(0, RESULT_LIMIT);
     } catch (error) {
-      client.logger.error('Error in search command', error);
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Search Failed', 'There was an error while searching.', false)],
-        components: [],
+      client.logger.error('Search resolve error', error);
+      return interaction.editReply(buildActionFeedback('Search Failed', 'Failed to fetch results from the audio server.', false));
+    }
+
+    await interaction.editReply(buildSearchV2(query, tracks));
+
+    const msg = await interaction.fetchReply();
+
+    let picked;
+    try {
+      const selection = await msg.awaitMessageComponent({
+        filter: i => i.user.id === interaction.user.id,
+        componentType: ComponentType.StringSelect,
+        time: SELECTION_TIMEOUT_MS,
       });
+      await selection.deferUpdate();
+      picked = tracks[parseInt(selection.values[0], 10)];
+    } catch {
+      return interaction.editReply(buildActionFeedback('Search Expired', 'No track was selected in time.', false));
+    }
+
+    if (!picked) {
+      return interaction.editReply(buildActionFeedback('Search Error', 'Could not resolve the selected track.', false));
+    }
+
+    picked._sourceInfo = { source: 'YouTube', sourceName: 'youtube' };
+
+    try {
+      const wasIdle = !client.musicPlayer.getPlayerState(interaction.guildId).isPlaying;
+      await client.musicPlayer.enqueue({
+        guildId: interaction.guildId,
+        track: picked,
+        textChannel: interaction.channel,
+        voiceChannel,
+      });
+
+      if (wasIdle) {
+        const reply = await interaction.editReply(buildNowPlayingV2(client, interaction.guildId));
+        client.musicPlayer.startNowPlayingRefresh(interaction.guildId, reply);
+        return reply;
+      }
+      return interaction.editReply(
+        buildPlayCommandReply({
+          interaction,
+          client,
+          guildId: interaction.guildId,
+          addedTrack: picked,
+          startedPlayback: false,
+        }),
+      );
+    } catch (error) {
+      client.logger.error('Error queuing search result', error);
+      return interaction.editReply(buildActionFeedback('Playback Failed', 'There was an error while trying to play that track.', false));
     }
   },
 };

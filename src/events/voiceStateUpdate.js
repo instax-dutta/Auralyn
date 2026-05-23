@@ -1,82 +1,54 @@
 import { Events } from 'discord.js';
+import { buildSimpleV2 } from '../utils/music-ui.js';
+import { AuralynColors } from '../utils/embeds.js';
 
 export default {
   name: Events.VoiceStateUpdate,
-  async execute(oldState, newState, client, shoukaku) {
-    const { id: userId } = oldState.member?.user || newState.member?.user || {};
-    if (userId === client.user?.id && oldState.channelId && !newState.channelId) {
-      const guildId = oldState.guild.id;
-      if (guildId) {
-        try {
-          const settings = await client.musicPlayer.getGuildSettings(guildId);
-          if (settings.twentyFourSeven) return;
-        } catch { /* proceed with normal cleanup */ }
+  async execute(oldState, newState, client) {
+    const botId = client.user?.id;
+    const movingUserId = (oldState.member?.user ?? newState.member?.user)?.id;
 
+    if (movingUserId === botId) {
+      const guildId = oldState.guild.id;
+      if (oldState.channelId && !newState.channelId) {
         client.musicPlayer.cleanupGuild(guildId);
         client.musicPlayer.players.delete(guildId);
+        client.telemetry?.trackVoiceDisconnected();
+      } else if (!oldState.channelId && newState.channelId) {
+        client.telemetry?.trackVoiceConnected();
       }
       return;
     }
 
-    if (userId === client.user?.id) {
-      if (newState.channelId && !oldState.channelId) {
-        client.telemetry?.trackVoiceConnected();
-      } else if (!newState.channelId && oldState.channelId) {
-        client.telemetry?.trackVoiceDisconnected();
-      }
-    }
-
-    const guild = oldState.guild || newState.guild;
+    const guild = oldState.guild ?? newState.guild;
     if (!guild) return;
 
-    const botVoiceState = guild.voiceStates.cache.get(client.user.id);
+    const botVoiceState = guild.voiceStates.cache.get(botId);
     if (!botVoiceState?.channelId) return;
 
     const botChannelId = botVoiceState.channelId;
-    if (oldState.channelId === botChannelId || newState.channelId === botChannelId) {
-      const channel = guild.channels.cache.get(botChannelId);
-      if (!channel || !channel.isVoiceBased()) return;
+    if (oldState.channelId !== botChannelId && newState.channelId !== botChannelId) return;
 
-      const members = channel.members.filter(member => !member.user.bot && member.id !== client.user.id);
-      if (members.size === 0) {
-        const settings = await client.musicPlayer.getGuildSettings(guild.id);
-        if (settings.twentyFourSeven) return;
+    const channel = guild.channels.cache.get(botChannelId);
+    if (!channel?.isVoiceBased()) return;
 
-        if (!client.aloneTimeouts) client.aloneTimeouts = new Map();
-        const existingTimeout = client.aloneTimeouts.get(guild.id);
-        if (existingTimeout) clearTimeout(existingTimeout);
+    const humanMembers = channel.members.filter(m => !m.user.bot);
+    if (humanMembers.size > 0) return;
 
-        const timeoutId = setTimeout(async () => {
-          const botVoiceStateCheck = guild.voiceStates.cache.get(client.user.id);
-          if (botVoiceStateCheck?.channelId === botChannelId) {
-            const channelCheck = guild.channels.cache.get(botChannelId);
-            if (channelCheck && channelCheck.isVoiceBased()) {
-              const membersCheck = channelCheck.members.filter(member => !member.user.bot && member.id !== client.user.id);
-              if (membersCheck.size === 0) {
-                try {
-                  await client.musicPlayer.stop(guild.id);
-                } catch (err) {
-                  client.logger.error(`Error leaving voice channel in guild ${guild.id}`, err);
-                }
-              }
-            }
-          }
+    const playerState = client.musicPlayer.getPlayerState(guild.id);
+    const textChannel = playerState?.textChannel ?? null;
 
-          if (client.aloneTimeouts) {
-            client.aloneTimeouts.delete(guild.id);
-          }
-        }, 120000);
-
-        client.aloneTimeouts.set(guild.id, timeoutId);
-      } else {
-        if (client.aloneTimeouts) {
-          const existingTimeout = client.aloneTimeouts.get(guild.id);
-          if (existingTimeout) {
-            clearTimeout(existingTimeout);
-            client.aloneTimeouts.delete(guild.id);
-          }
-        }
+    try {
+      if (textChannel) {
+        await textChannel.send(buildSimpleV2(
+          'Auralyn | Voice Session Ended',
+          'All members have left the voice channel. Disconnecting now.',
+          AuralynColors.info,
+        )).catch(() => {});
       }
+      await client.musicPlayer.stop(guild.id);
+    } catch (err) {
+      client.logger.error(`Error disconnecting from empty voice channel in guild ${guild.id}`, err);
     }
   },
 };

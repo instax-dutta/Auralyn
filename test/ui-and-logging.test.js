@@ -2,83 +2,55 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  AuralynColors,
-  buildPlayReply,
-  buildPlayerControls,
-  createNowPlayingEmbed,
-} from '../src/utils/embeds.js';
+  buildNowPlayingPayload,
+  buildSimpleV2,
+  buildActionFeedback,
+} from '../src/utils/music-ui.js';
 import { createLogger } from '../src/utils/logger.js';
 
-const sampleTrack = {
-  encoded: 'encoded-track',
-  info: {
-    title: 'Midnight Skyline',
-    author: 'Auralyn Ensemble',
-    length: 245000,
-    uri: 'https://example.com/midnight-skyline',
-    artworkUrl: 'https://example.com/cover.png',
-  },
-};
+test('buildSimpleV2 returns a Components V2 payload', () => {
+  const payload = buildSimpleV2('Auralyn | Status', 'All systems operational.');
 
-test('createNowPlayingEmbed builds a branded now playing embed', () => {
-  const embed = createNowPlayingEmbed({
-    track: sampleTrack,
-    title: 'Auralyn | Playback Resumed',
-    loopModeLabel: 'Queue',
-    volume: 72,
-    queueLength: 4,
-    requestedBy: 'R4C3R',
-  });
-
-  const json = embed.toJSON();
-  assert.equal(json.color, AuralynColors.primary);
-  assert.equal(json.title, 'Auralyn | Playback Resumed');
-  assert.match(json.description, /Midnight Skyline/);
-  assert.equal(json.thumbnail.url, 'https://example.com/cover.png');
-  assert.deepEqual(
-    json.fields.map((field) => field.name),
-    ['Artist', 'Duration', 'Volume', 'Loop', 'Up Next', 'Requested By'],
-  );
+  assert.ok(payload.components, 'should have components array');
+  assert.ok(payload.components[0].toJSON().accent_color, 'should have accent color');
+  assert.ok(payload.flags !== undefined, 'should have IsComponentsV2 flag');
 });
 
-test('buildPlayReply returns queue-specific response when adding behind an active track', () => {
-  const reply = buildPlayReply({
-    guildId: 'guild-1',
-    isPaused: false,
-    requestedBy: 'R4C3R',
-    addedTrack: sampleTrack,
-    currentTrack: {
-      ...sampleTrack,
+test('buildActionFeedback returns ok payload for success', () => {
+  const payload = buildActionFeedback('Queue Updated', 'Removed a track.', true);
+  const json = payload.components[0].toJSON();
+  assert.ok(json.accent_color, 'should have color');
+});
+
+test('buildActionFeedback returns error payload for failure', () => {
+  const payload = buildActionFeedback('Error', 'Something went wrong.', false);
+  const json = payload.components[0].toJSON();
+  assert.ok(json.accent_color, 'should have color');
+});
+
+test('buildNowPlayingPayload includes progress bar and player controls', () => {
+  const payload = buildNowPlayingPayload({
+    track: {
       info: {
-        ...sampleTrack.info,
-        title: 'Already Playing',
+        title: 'Midnight Skyline',
+        author: 'Auralyn Ensemble',
+        length: 245000,
+        uri: 'https://example.com/midnight-skyline',
+        artworkUrl: 'https://example.com/cover.png',
       },
     },
-    queueLength: 3,
-    loopModeLabel: 'Off',
-    volume: 100,
-    startedPlayback: false,
+    position: 10000,
+    volume: 72,
+    loopMode: 2,
+    queueLength: 4,
+    autoplay: false,
+    guildId: 'guild-1',
+    isPaused: false,
   });
 
-  assert.equal(reply.embeds.length, 2);
-  assert.equal(reply.embeds[0].toJSON().title, 'Auralyn | Added to Queue');
-  assert.match(reply.embeds[0].toJSON().description, /Midnight Skyline/);
-  assert.equal(reply.embeds[1].toJSON().title, 'Auralyn | Now Playing');
-  assert.equal(reply.components[0].toJSON().components[0].custom_id, 'auralyn:skip:guild-1');
-});
-
-test('buildPlayerControls reflects paused state in button ids and labels', () => {
-  const activeRow = buildPlayerControls({ guildId: 'guild-1', isPaused: false })[0];
-  const pausedRow = buildPlayerControls({ guildId: 'guild-1', isPaused: true })[0];
-  const activeJson = activeRow.toJSON();
-  const pausedJson = pausedRow.toJSON();
-
-  assert.equal(activeJson.components[1].custom_id, 'auralyn:pause:guild-1');
-  assert.equal(activeJson.components[1].label, 'Pause');
-  assert.equal(pausedJson.components[1].custom_id, 'auralyn:resume:guild-1');
-  assert.equal(pausedJson.components[1].label, 'Resume');
-  assert.equal(activeJson.components[0].custom_id, 'auralyn:skip:guild-1');
-  assert.equal(activeJson.components[2].custom_id, 'auralyn:stop:guild-1');
+  const jsonStr = JSON.stringify(payload);
+  assert.ok(jsonStr.includes('Midnight Skyline'), 'should contain track title');
+  assert.ok(jsonStr.includes('Auralyn'), 'should be branded');
 });
 
 test('logger filters messages below configured level', () => {

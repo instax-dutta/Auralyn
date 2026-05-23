@@ -1,9 +1,10 @@
 import { LoadType } from 'shoukaku';
 import { createSilentLogger } from '../utils/logger.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
-import { extractYoutubeVideoId } from '../utils/tracks.js';
-import { infoEmbed } from '../utils/embeds.js';
 import { QueueManager, LOOP_TRACK } from './queue.js';
+import { FILTER_PRESETS, DEFAULT_FILTER } from '../utils/audio-filters.js';
+import { buildNowPlayingPayload, buildSimpleV2 } from '../utils/music-ui.js';
+import { AuralynColors } from '../utils/embeds.js';
 
 const END_REASONS_THAT_SHOULD_ADVANCE = new Set(['finished', 'loadFailed']);
 
@@ -21,8 +22,43 @@ export class MusicPlayer {
     this.trackResolver = trackResolver;
     this.telemetry = telemetry;
     this.queueManager = new QueueManager(logger.child('queue'));
-    this.voteSkipSets = new Map();
-    this._reconnecting = new Set();
+    this.nowPlayingMessages = new Map();
+  }
+
+  startNowPlayingRefresh(guildId, message) {
+    this.stopNowPlayingRefresh(guildId);
+    const interval = setInterval(async () => {
+      const state = this.queueManager.getState(guildId);
+      if (!state?.isPlaying || !state?.currentTrack) {
+        this.stopNowPlayingRefresh(guildId);
+        return;
+      }
+      try {
+        await message.edit(
+          buildNowPlayingPayload({
+            track: state.currentTrack,
+            position: state.lavalinkPlayer?.position ?? 0,
+            volume: state.volume,
+            loopMode: state.loopMode,
+            queueLength: state.queue.length,
+            autoplay: state.autoplay,
+            guildId,
+            isPaused: state.isPaused,
+          }),
+        );
+      } catch {
+        this.stopNowPlayingRefresh(guildId);
+      }
+    }, 15_000);
+    this.nowPlayingMessages.set(guildId, { message, interval });
+  }
+
+  stopNowPlayingRefresh(guildId) {
+    const entry = this.nowPlayingMessages.get(guildId);
+    if (entry) {
+      clearInterval(entry.interval);
+      this.nowPlayingMessages.delete(guildId);
+    }
   }
 
   get players() {
@@ -55,7 +91,7 @@ export class MusicPlayer {
 
     if (!state.isPlaying) {
       this.logger.debug(`Guild ${guildId} is idle, starting playback`);
-      await this.playNext(guildId);
+      await this.playNext(guildId, { skipNotification: true });
     }
 
     return state;
@@ -65,18 +101,12 @@ export class MusicPlayer {
     return this.enqueue({ guildId, track, textChannel, voiceChannel });
   }
 
-  async enqueueFront({ guildId, track, textChannel, voiceChannel }) {
+  async enqueuePlaylist({ guildId, tracks, textChannel, voiceChannel }) {
     const state = this.queueManager.getState(guildId);
     state.textChannel = textChannel;
     state.voiceChannel = voiceChannel;
 
-    const nextTrack = {
-      ...track,
-      requestedByUserId: track.requestedByUserId ?? null,
-      requestedByName: track.requestedByName ?? null,
-    };
-
-    this.queueManager.enqueueFront(guildId, nextTrack);
+    this.queueManager.enqueueBulk(guildId, tracks);
 
     const settings = await this.getGuildSettings(guildId);
     if (state.volume !== settings.defaultVolume) {
@@ -86,80 +116,10 @@ export class MusicPlayer {
     await this.persistGuildState(guildId);
 
     if (!state.isPlaying) {
-      this.logger.debug(`Guild ${guildId} is idle, starting playback`);
-      await this.playNext(guildId);
+      await this.playNext(guildId, { skipNotification: true });
     }
 
     return state;
-  }
-
-  async enqueuePlaylist({
-    guildId,
-    tracks,
-    textChannel,
-    voiceChannel,
-    batchSize = 50,
-    batchDelayMs = 1500,
-    onProgress = null,
-  } = {}) {
-    if (!Array.isArray(tracks) || tracks.length === 0) {
-      return { enqueued: 0, total: 0, aborted: false };
-    }
-
-    const state = this.queueManager.getState(guildId);
-    state.textChannel = textChannel;
-    state.voiceChannel = voiceChannel;
-
-    const settings = await this.getGuildSettings(guildId);
-    if (state.volume !== settings.defaultVolume) {
-      await this.setVolume(guildId, settings.defaultVolume);
-    }
-
-    const total = tracks.length;
-    let enqueued = 0;
-    let playbackKicked = false;
-
-    for (let i = 0; i < total; i += batchSize) {
-      // Abort if the guild session was cleaned up (e.g. /stop or disconnect)
-      if (this.queueManager.getState(guildId) !== state) {
-        this.logger.debug(`Playlist enqueue aborted for guild ${guildId}: session reset`);
-        return { enqueued, total, aborted: true };
-      }
-
-      const batch = tracks.slice(i, i + batchSize);
-      for (const t of batch) {
-        this.queueManager.enqueue(guildId, {
-          ...t,
-          requestedByUserId: t.requestedByUserId ?? null,
-          requestedByName: t.requestedByName ?? null,
-        });
-        enqueued += 1;
-      }
-
-      if (!playbackKicked && !state.isPlaying) {
-        playbackKicked = true;
-        this.logger.debug(`Guild ${guildId} is idle, starting playback (playlist bulk)`);
-        void this.playNext(guildId).catch(err => {
-          this.logger.error(`Playlist playback start failed for guild ${guildId}`, err);
-        });
-      }
-
-      try {
-        await this.persistGuildState(guildId);
-      } catch (err) {
-        this.logger.warn(`Persist failed during playlist enqueue for guild ${guildId}: ${err.message}`);
-      }
-
-      if (onProgress) {
-        try { await onProgress({ enqueued, total }); } catch { /* UI errors are non-fatal */ }
-      }
-
-      if (i + batchSize < total && batchDelayMs > 0) {
-        await new Promise(resolve => setTimeout(resolve, batchDelayMs));
-      }
-    }
-
-    return { enqueued, total, aborted: false };
   }
 
   async getOrCreateLavalinkPlayer(guildId) {
@@ -194,33 +154,78 @@ export class MusicPlayer {
 
     const volume = this.queueManager.getVolume(guildId);
     await player.setGlobalVolume(volume);
+
+    const preset = this.queueManager.getFilterPreset(guildId) ?? DEFAULT_FILTER;
+    const filters = FILTER_PRESETS[preset];
+    if (filters && Object.keys(filters).length > 0) {
+      await player.setFilters(filters);
+    }
+
     this.queueManager.setLavalinkPlayer(guildId, player);
     this.queueManager.setListeners(guildId, listeners);
     return player;
   }
 
-  async playNext(guildId) {
+  async playNext(guildId, { skipNotification = false } = {}) {
+    this.stopNowPlayingRefresh(guildId);
     const state = this.queueManager.getState(guildId);
     const nextTrack = this.queueManager.getNextTrack(state);
 
     if (!nextTrack) {
-      this.logger.debug(`No next track available for guild ${guildId}`);
+      if (state.autoplay) {
+        const autoTrack = await this.fetchAutoplayTrack(guildId);
+        if (autoTrack) {
+          this.queueManager.enqueue(guildId, autoTrack);
+          if (state.textChannel) {
+            state.textChannel.send(buildSimpleV2(
+              'Auralyn | Autoplay',
+              `Autoplaying **[${autoTrack.info?.title ?? 'Unknown'}](${autoTrack.info?.uri ?? ''})** based on your recent listening.`,
+              AuralynColors.info,
+            )).catch(() => {});
+          }
+          return this.playNext(guildId, { skipNotification: true });
+        }
+      }
+
+      this.logger.debug(`No next track for guild ${guildId} — queue ended`);
+      const textChannel = state.textChannel;
       this.queueManager.setCurrentTrack(guildId, null);
       state.isPlaying = false;
       state.isPaused = false;
-      this.clearVoteSkipSet(guildId);
+      if (textChannel) {
+        textChannel.send(buildSimpleV2(
+          'Auralyn | Queue Ended',
+          'The queue has ended. Add more tracks with `/play` or `/search`.',
+          AuralynColors.info,
+        )).catch(() => {});
+      }
       return null;
     }
 
     this.queueManager.setCurrentTrack(guildId, nextTrack);
-    this.clearVoteSkipSet(guildId);
 
-    this.logger.debug(`Preparing to play track for guild ${guildId}: ${nextTrack?.info?.title ?? 'unknown'}`);
+    this.logger.info(`Playing: ${nextTrack?.info?.title ?? 'unknown'}`);
     const player = await this.getOrCreateLavalinkPlayer(guildId);
     this.logger.debug(`Sending playTrack to Lavalink for guild ${guildId}`);
     await player.playTrack({ track: { encoded: nextTrack.encoded } });
     this.logger.debug(`playTrack completed for guild ${guildId}`);
     this.telemetry?.trackTrackPlayed();
+
+    if (!skipNotification && state.textChannel) {
+      state.textChannel.send(
+        buildNowPlayingPayload({
+          track: nextTrack,
+          position: 0,
+          volume: state.volume,
+          loopMode: state.loopMode,
+          queueLength: state.queue.length,
+          autoplay: state.autoplay,
+          guildId,
+          isPaused: false,
+        }),
+      ).then(msg => this.startNowPlayingRefresh(guildId, msg)).catch(() => {});
+    }
+
     await this.persistGuildState(guildId);
     return nextTrack;
   }
@@ -230,110 +235,8 @@ export class MusicPlayer {
     if (!state.isPlaying) return;
     if (!END_REASONS_THAT_SHOULD_ADVANCE.has(event.reason ?? 'finished')) return;
 
-    this.queueManager.pushHistory(guildId);
     this.queueManager.onTrackEnd(guildId);
-
-    const nextTrack = this.queueManager.getNextTrack(state);
-
-    if (nextTrack) {
-      this.queueManager.setCurrentTrack(guildId, nextTrack);
-      this.clearVoteSkipSet(guildId);
-      const player = await this.getOrCreateLavalinkPlayer(guildId);
-      await player.playTrack({ track: { encoded: nextTrack.encoded } });
-      this.telemetry?.trackTrackPlayed();
-      await this.persistGuildState(guildId);
-      return;
-    }
-
-    const autoplayTrack = await this.tryAutoplay(guildId);
-    if (autoplayTrack) {
-      this.queueManager.setCurrentTrack(guildId, autoplayTrack);
-      this.clearVoteSkipSet(guildId);
-      const player = await this.getOrCreateLavalinkPlayer(guildId);
-      await player.playTrack({ track: { encoded: autoplayTrack.encoded } });
-      this.telemetry?.trackTrackPlayed();
-      await this.persistGuildState(guildId);
-      return;
-    }
-
-    this.queueManager.setCurrentTrack(guildId, null);
-    state.isPlaying = false;
-    state.isPaused = false;
-    this.clearVoteSkipSet(guildId);
-  }
-
-  async tryAutoplay(guildId) {
-    const state = this.queueManager.getState(guildId);
-    const settings = await this.getGuildSettings(guildId);
-    if (!settings.autoplay) return null;
-
-    const history = this.queueManager.getHistory(guildId);
-    const seedTrack = state.currentTrack ?? history[history.length - 1];
-    if (!seedTrack?.info?.title) return null;
-
-    const seenIds = new Set();
-    for (const past of history) {
-      const id = extractYoutubeVideoId(past?.info?.uri);
-      if (id) seenIds.add(id);
-    }
-    const seedId = extractYoutubeVideoId(seedTrack.info.uri);
-    if (seedId) seenIds.add(seedId);
-
-    const pick = (candidates) => candidates?.find(t => {
-      const id = extractYoutubeVideoId(t?.info?.uri);
-      return id && !seenIds.has(id);
-    }) ?? null;
-
-    if (seedId) {
-      const mixTracks = await this.fetchYoutubeMix(seedId);
-      const mixPick = pick(mixTracks);
-      if (mixPick) {
-        return { ...mixPick, requestedByUserId: null, requestedByName: 'autoplay' };
-      }
-    }
-
-    const fallbackQuery = (seedTrack.info.author || seedTrack.info.title || '').trim();
-    if (fallbackQuery) {
-      try {
-        const node = this.shoukaku.getIdealNode();
-        if (node) {
-          const result = await node.rest.resolve(`ytmsearch:${fallbackQuery}`);
-          const searchHits = result?.loadType === LoadType.SEARCH ? result.data : [];
-          const searchPick = pick(searchHits);
-          if (searchPick) {
-            return { ...searchPick, requestedByUserId: null, requestedByName: 'autoplay' };
-          }
-        }
-      } catch (error) {
-        this.logger.error(`Autoplay search failed for guild ${guildId}`, error);
-      }
-    }
-
-    this.notifyAutoplayMiss(state.textChannel);
-    return null;
-  }
-
-  async fetchYoutubeMix(videoId) {
-    try {
-      const node = this.shoukaku.getIdealNode();
-      if (!node) return null;
-      const url = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
-      const result = await node.rest.resolve(url);
-      if (result?.loadType !== LoadType.PLAYLIST) return null;
-      return result.data?.tracks ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  notifyAutoplayMiss(textChannel) {
-    if (!textChannel?.send) return;
-    textChannel.send({
-      embeds: [infoEmbed(
-        "Autoplay couldn't find a related track. Add more with `/play` or `/search`.",
-        'Auralyn | Autoplay',
-      )],
-    }).catch(() => { /* best-effort */ });
+    await this.playNext(guildId);
   }
 
   async handleTrackProblem(guildId, event) {
@@ -343,70 +246,6 @@ export class MusicPlayer {
 
   async handleConnectionClosed(guildId, event) {
     this.logger.warn(`Voice connection closed in guild ${guildId}`, event);
-
-    if (this._reconnecting.has(guildId)) {
-      this.logger.debug(`Already reconnecting for guild ${guildId}, ignoring duplicate close event`);
-      return;
-    }
-
-    const settings = await this.getGuildSettings(guildId);
-    if (settings.twentyFourSeven) {
-      this.logger.debug(`24/7 mode enabled, reconnecting for guild ${guildId}`);
-
-      this.cleanupGuild(guildId);
-      const state = this.queueManager.getState(guildId);
-      state.lavalinkPlayer = null;
-
-      this._reconnecting.add(guildId);
-      try {
-        const voiceChannel = state.voiceChannel;
-        if (!voiceChannel) {
-          this.logger.warn(`No voice channel stored for guild ${guildId}, cannot reconnect`);
-          await this.stop(guildId);
-          return;
-        }
-
-        const player = await this.shoukaku.joinVoiceChannel({
-          guildId,
-          channelId: voiceChannel.id,
-          shardId: voiceChannel.guild?.shardId ?? 0,
-          deaf: true,
-          mute: false,
-        });
-
-        const listeners = {
-          end: (event) => this.handleTrackEnd(guildId, event),
-          stuck: (event) => this.handleTrackProblem(guildId, event),
-          exception: (event) => this.handleTrackProblem(guildId, event),
-          closed: (event) => this.handleConnectionClosed(guildId, event),
-        };
-
-        for (const [event, listener] of Object.entries(listeners)) {
-          player.on(event, listener);
-        }
-
-        state.lavalinkPlayer = player;
-        this.queueManager.setListeners(guildId, listeners);
-
-        if (state.currentTrack) {
-          await player.playTrack({ track: { encoded: state.currentTrack.encoded } });
-          this.logger.debug(`Resumed playback for guild ${guildId}`);
-        } else if (state.queue.length > 0) {
-          await this.playNext(guildId);
-        } else {
-          this.logger.debug(`Reconnected voice for guild ${guildId}, queue is empty`);
-        }
-
-        return;
-      } catch (error) {
-        this.logger.error(`Failed to reconnect for guild ${guildId}`, error);
-        await this.stop(guildId);
-        return;
-      } finally {
-        this._reconnecting.delete(guildId);
-      }
-    }
-
     await this.stop(guildId);
   }
 
@@ -414,21 +253,20 @@ export class MusicPlayer {
     const state = this.queueManager.getState(guildId);
     if (!state.currentTrack && state.queue.length === 0) return null;
 
-    this.queueManager.pushHistory(guildId);
-
     const player = state.lavalinkPlayer;
+    this.queueManager.pushToHistory(guildId, state.currentTrack);
     state.currentTrack = null;
 
     if (player) {
       await player.stopTrack();
     }
 
-    this.clearVoteSkipSet(guildId);
     await this.persistGuildState(guildId);
     return this.playNext(guildId);
   }
 
   async stop(guildId) {
+    this.stopNowPlayingRefresh(guildId);
     const state = this.queueManager.getState(guildId);
     state.queue = [];
     state.currentTrack = null;
@@ -443,15 +281,14 @@ export class MusicPlayer {
       }
     }
 
-    this.clearVoteSkipSet(guildId);
     await this.disconnect(guildId);
   }
 
   async disconnect(guildId) {
+    this.stopNowPlayingRefresh(guildId);
     this.cleanupGuild(guildId);
     await this.shoukaku.leaveVoiceChannel(guildId);
     this.queueManager.cleanup(guildId);
-    this.voteSkipSets.delete(guildId);
     if (this.sessionStore?.delete) {
       await this.sessionStore.delete(guildId);
     }
@@ -503,6 +340,35 @@ export class MusicPlayer {
     return safeVolume;
   }
 
+  async seek(guildId, positionMs) {
+    const state = this.queueManager.getState(guildId);
+    if (!state.isPlaying || !state.lavalinkPlayer) throw new Error('Nothing is playing.');
+
+    const track = state.currentTrack;
+    if (track?.info?.isStream) throw new Error('Cannot seek in a live stream.');
+
+    const duration = track?.info?.length ?? 0;
+    if (positionMs < 0 || positionMs > duration) {
+      throw new Error(`Seek position out of range. Track length is ${Math.floor(duration / 1000)}s.`);
+    }
+
+    await state.lavalinkPlayer.seekTo(positionMs);
+    return positionMs;
+  }
+
+  async setFilter(guildId, preset) {
+    if (!FILTER_PRESETS[preset]) throw new Error(`Unknown filter preset: ${preset}`);
+
+    this.queueManager.setFilterPreset(guildId, preset);
+
+    const player = this.queueManager.getLavalinkPlayer(guildId);
+    if (player) {
+      await player.setFilters(FILTER_PRESETS[preset]);
+    }
+
+    return preset;
+  }
+
   shuffle(guildId) {
     const queue = this.queueManager.shuffle(guildId);
     void this.persistGuildState(guildId);
@@ -521,12 +387,94 @@ export class MusicPlayer {
     return removed;
   }
 
+  move(guildId, from, to) {
+    const moved = this.queueManager.move(guildId, from, to);
+    void this.persistGuildState(guildId);
+    return moved;
+  }
+
+  clear(guildId) {
+    this.queueManager.clearQueue(guildId);
+    void this.persistGuildState(guildId);
+  }
+
+  async jump(guildId, position) {
+    this.queueManager.jumpTo(guildId, position);
+    await this.skip(guildId);
+  }
+
+  getPosition(guildId) {
+    return this.queueManager.getLavalinkPlayer(guildId)?.position ?? 0;
+  }
+
   getQueue(guildId) {
     return this.queueManager.getQueue(guildId);
   }
 
   getCurrentTrack(guildId) {
     return this.queueManager.getCurrentTrack(guildId);
+  }
+
+  getHistory(guildId) {
+    return this.queueManager.getHistory(guildId);
+  }
+
+  toggleAutoplay(guildId) {
+    const current = this.queueManager.getAutoplay(guildId);
+    this.queueManager.setAutoplay(guildId, !current);
+    return !current;
+  }
+
+  async fetchAutoplayTrack(guildId) {
+    const history = this.queueManager.getHistory(guildId);
+    const seed = history[0];
+    if (!seed?.info) return null;
+
+    const node = this.shoukaku.getIdealNode();
+    if (!node) return null;
+
+    const extractYouTubeVideoId = (uri) => {
+      if (!uri) return null;
+      const m = uri.match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{11})/);
+      return m?.[1] ?? null;
+    };
+    const normalizeTitle = (title) => (title ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const seenVideoIds = new Set(history.map(t => extractYouTubeVideoId(t.info?.uri)).filter(Boolean));
+    const seenTitles = new Set(history.map(t => normalizeTitle(t.info?.title)).filter(Boolean));
+
+    const isNovel = (candidate) => {
+      const vId = extractYouTubeVideoId(candidate.info?.uri);
+      const nTitle = normalizeTitle(candidate.info?.title);
+      if (vId && seenVideoIds.has(vId)) return false;
+      if (nTitle && seenTitles.has(nTitle)) return false;
+      return true;
+    };
+
+    const seedVideoId = extractYouTubeVideoId(seed.info?.uri);
+    if (seedVideoId) {
+      try {
+        const mixUrl = `https://www.youtube.com/watch?v=${seedVideoId}&list=RD${seedVideoId}`;
+        const result = await node.rest.resolve(mixUrl);
+        const tracks = result?.data?.tracks ?? (Array.isArray(result?.data) ? result.data : []);
+        if (tracks.length > 0) {
+          const novel = tracks.find(isNovel);
+          if (novel) return novel;
+        }
+      } catch (err) {
+        this.logger.warn(`Autoplay: no Mix available for "${seed.info.title ?? 'track'}" — using artist fallback`);
+      }
+    }
+
+    try {
+      const fallbackQuery = `ytsearch:${seed.info.author || seed.info.title}`;
+      const result = await node.rest.resolve(fallbackQuery);
+      if (!result || result.loadType !== LoadType.SEARCH || !result.data?.length) return null;
+      return result.data.find(isNovel) ?? null;
+    } catch (err) {
+      this.logger.warn(`Autoplay: fallback search failed for guild ${guildId} — ${err.message}`);
+      return null;
+    }
   }
 
   async getGuildSettings(guildId) {
@@ -548,61 +496,5 @@ export class MusicPlayer {
       voiceChannelId: state.voiceChannel?.id ?? null,
       updatedAt: new Date().toISOString(),
     });
-  }
-
-  clearVoteSkipSet(guildId) {
-    this.voteSkipSets.delete(guildId);
-  }
-
-  getVoteSkipSet(guildId) {
-    if (!this.voteSkipSets.has(guildId)) {
-      this.voteSkipSets.set(guildId, new Set());
-    }
-    return this.voteSkipSets.get(guildId);
-  }
-
-  async previous(guildId) {
-    const state = this.queueManager.getState(guildId);
-    const prevTrack = this.queueManager.popHistory(guildId);
-    if (!prevTrack) return null;
-
-    if (state.currentTrack) {
-      state.queue.unshift(state.currentTrack);
-    }
-
-    if (state.lavalinkPlayer) {
-      await state.lavalinkPlayer.stopTrack();
-    }
-
-    this.queueManager.setCurrentTrack(guildId, prevTrack);
-    this.clearVoteSkipSet(guildId);
-
-    const player = await this.getOrCreateLavalinkPlayer(guildId);
-    await player.playTrack({ track: { encoded: prevTrack.encoded } });
-    this.telemetry?.trackTrackPlayed();
-    await this.persistGuildState(guildId);
-    return prevTrack;
-  }
-
-  async setAutoplay(guildId, enabled) {
-    if (this.settingsStore?.update) {
-      return this.settingsStore.update(guildId, { autoplay: enabled });
-    }
-    return null;
-  }
-
-  async set247(guildId, enabled) {
-    if (this.settingsStore?.update) {
-      return this.settingsStore.update(guildId, { twentyFourSeven: enabled });
-    }
-    return null;
-  }
-
-  getState(guildId) {
-    return this.queueManager.getState(guildId);
-  }
-
-  getQueueManager() {
-    return this.queueManager;
   }
 }

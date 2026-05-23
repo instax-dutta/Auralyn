@@ -1,36 +1,27 @@
-import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('autoplay')
-    .setDescription('Toggle autoplay (automatically play related tracks when queue ends)')
-    .setContexts(InteractionContextType.Guild)
-    .addBooleanOption(option =>
-      option.setName('enabled')
-        .setDescription('Enable or disable autoplay')
-        .setRequired(true)),
+    .setDescription('Toggle autoplay — queues related tracks automatically when the queue ends'),
 
-  async execute(interaction, client, shoukaku) {
+  async execute(interaction, client) {
     await interaction.deferReply();
 
-    try {
-      const enabled = interaction.options.getBoolean('enabled');
-      await client.musicPlayer.setAutoplay(interaction.guildId, enabled);
+    const state = client.musicPlayer.getPlayerState(interaction.guildId);
 
-      return interaction.editReply({
-        embeds: [buildActionFeedback(
-          'Autoplay',
-          enabled ? 'Autoplay enabled. Related tracks will play automatically when the queue ends.' : 'Autoplay disabled.',
-        )],
-        components: [],
-      });
-    } catch (error) {
-      client.logger.error('Error in autoplay command', error);
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Autoplay', 'Failed to update autoplay setting.', false)],
-        components: [],
-      });
+    if (!state.isPlaying) {
+      return interaction.editReply(buildActionFeedback('Nothing Playing', 'Start playing a track first before enabling autoplay.', false));
     }
+
+    const enabled = client.musicPlayer.toggleAutoplay(interaction.guildId);
+
+    return interaction.editReply(buildActionFeedback(
+      `Autoplay ${enabled ? 'Enabled' : 'Disabled'}`,
+      enabled
+        ? 'Auralyn will automatically queue related tracks when the queue ends.'
+        : 'Autoplay is now off. Playback will stop when the queue is empty.',
+    ));
   },
 };

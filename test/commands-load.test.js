@@ -21,7 +21,5 @@ test('every command module exports data.execute and a serialisable builder', asy
     const json = cmd.data.toJSON();
     assert.ok(json.name, `${file}: command JSON missing name`);
     assert.ok(json.description, `${file}: command JSON missing description`);
-    assert.ok(Array.isArray(json.contexts) && json.contexts.includes(0),
-      `${file}: command must have setContexts(InteractionContextType.Guild) — contexts=${JSON.stringify(json.contexts)}`);
   }
 });

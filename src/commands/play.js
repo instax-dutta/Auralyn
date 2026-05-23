@@ -1,16 +1,15 @@
-import { SlashCommandBuilder, InteractionContextType } from 'discord.js';
-import { buildActionFeedback, buildPlayCommandReply } from '../utils/music-ui.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { buildActionFeedback, buildNowPlayingV2, buildPlayCommandReply, buildPlaylistEmbed } from '../utils/music-ui.js';
 import { resolveTrack } from '../utils/tracks.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play a song or add it to the queue')
-    .setContexts(InteractionContextType.Guild)
+    .setDescription('Play a song or playlist, or add it to the queue')
     .addStringOption(option =>
       option.setName('query')
-        .setDescription('The song to play (YouTube URL, Spotify URL, or search terms)')
+        .setDescription('Song or playlist (YouTube/Spotify URL, or search terms)')
         .setRequired(true)),
 
   async execute(interaction, client, shoukaku) {
@@ -20,18 +19,12 @@ export default {
     const voiceChannel = interaction.member.voice.channel;
 
     if (!voiceChannel) {
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before using `/play`.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Voice Required', 'Join a voice channel before using `/play`.', false));
     }
 
     const botVoiceChannelId = interaction.guild.members.me?.voice.channelId;
     if (botVoiceChannelId && botVoiceChannelId !== voiceChannel.id) {
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Voice Session Locked', 'Auralyn is already connected to a different voice channel.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Voice Session Locked', 'Auralyn is already connected to a different voice channel.', false));
     }
 
     try {
@@ -41,79 +34,35 @@ export default {
       const { track, playlist } = await resolveTrack(shoukaku, query, { sourcePriority });
 
       if (playlist) {
-        const tracks = playlist.tracks ?? [];
+        const tracks = (playlist.tracks ?? []).map(t => ({
+          ...t,
+          requestedByUserId: interaction.user.id,
+          requestedByName: interaction.user.username,
+        }));
+
         if (tracks.length === 0) {
-          return interaction.editReply({
-            embeds: [buildActionFeedback('Empty Playlist', 'This playlist does not have any playable tracks.', false)],
-            components: [],
-          });
+          return interaction.editReply(buildActionFeedback('Empty Playlist', 'That playlist has no playable tracks.', false));
         }
 
-        const playlistName = playlist.info?.name ?? 'playlist';
-        const total = tracks.length;
-        const requester = {
-          requestedByUserId: interaction.user.id,
-          requestedByName: interaction.member?.displayName ?? interaction.user.username,
-        };
-        const annotated = tracks.map(t => ({ ...t, ...requester }));
-
-        const renderProgress = (enqueued) => buildActionFeedback(
-          'Adding Playlist',
-          `📥 Enqueueing **${playlistName}** — ${enqueued}/${total} tracks added${enqueued < total ? '…' : '.'}`,
-        );
-
-        await interaction.editReply({
-          embeds: [renderProgress(0)],
-          components: [],
-        });
-
-        let lastEditAt = 0;
-        const PROGRESS_EDIT_INTERVAL_MS = 1500;
-
-        const { enqueued, aborted } = await client.musicPlayer.enqueuePlaylist({
+        const wasIdle = !client.musicPlayer.getPlayerState(interaction.guildId).isPlaying;
+        await client.musicPlayer.enqueuePlaylist({
           guildId: interaction.guildId,
-          tracks: annotated,
+          tracks,
           textChannel: interaction.channel,
           voiceChannel,
-          batchSize: 50,
-          batchDelayMs: 1500,
-          onProgress: async ({ enqueued, total }) => {
-            const now = Date.now();
-            const isFinalBatch = enqueued >= total;
-            if (!isFinalBatch && now - lastEditAt < PROGRESS_EDIT_INTERVAL_MS) return;
-            lastEditAt = now;
-            try {
-              await interaction.editReply({
-                embeds: [renderProgress(enqueued)],
-                components: [],
-              });
-            } catch { /* edit failures are non-fatal */ }
-          },
         });
 
-        if (enqueued === 0) {
-          return interaction.editReply({
-            embeds: [buildActionFeedback('Playlist Failed', 'Could not enqueue any tracks from this playlist.', false)],
-            components: [],
-          });
-        }
-
-        return interaction.editReply({
-          embeds: [buildActionFeedback(
-            'Playlist Added',
-            aborted
-              ? `Added **${enqueued}/${total}** tracks from **${playlistName}** before the session was reset.`
-              : `Enqueued **${enqueued} track${enqueued === 1 ? '' : 's'}** from **${playlistName}**.`,
-          )],
-          components: [],
-        });
+        return interaction.editReply(buildPlaylistEmbed({
+          name: playlist.info?.name ?? 'Playlist',
+          trackCount: tracks.length,
+          firstTrack: tracks[0],
+          wasIdle,
+          requestedBy: interaction.user.username,
+        }));
       }
 
       if (!track) {
-        return interaction.editReply({
-          embeds: [buildActionFeedback('No Results', 'Auralyn could not find a playable result for that search.', false)],
-          components: [],
-        });
+        return interaction.editReply(buildActionFeedback('No Results', 'Auralyn could not find a playable result for that search.', false));
       }
 
       const wasIdle = !client.musicPlayer.getPlayerState(interaction.guildId).isPlaying;
@@ -123,28 +72,24 @@ export default {
         textChannel: interaction.channel,
         voiceChannel,
       });
+
+      if (wasIdle) {
+        const msg = await interaction.editReply(buildNowPlayingV2(client, interaction.guildId));
+        client.musicPlayer.startNowPlayingRefresh(interaction.guildId, msg);
+        return msg;
+      }
       return interaction.editReply(
         buildPlayCommandReply({
           interaction,
           client,
           guildId: interaction.guildId,
           addedTrack: track,
-          startedPlayback: wasIdle,
+          startedPlayback: false,
         }),
       );
     } catch (error) {
       client.logger.error('Error in play command', error);
-
-      const message = error.message?.includes('No connected Lavalink node')
-        ? 'The music server is not connected. Please try again in a moment.'
-        : error.message?.includes('Unsupported Lavalink load type')
-          ? 'This type of content is not supported right now.'
-          : 'There was an error while trying to play that.';
-
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Playback Failed', message, false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Playback Failed', 'There was an error while trying to play that song.', false));
     }
   },
 };

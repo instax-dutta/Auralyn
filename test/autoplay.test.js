@@ -28,7 +28,7 @@ const ytTrack = (id, extra = {}) => ({
 
 class FakeNode {
   constructor() {
-    this.responses = []; // [{ matches: (id) => bool, response }]
+    this.responses = [];
     this.calls = [];
   }
   on(matcher, response) {
@@ -54,31 +54,16 @@ function fakeShoukaku(node) {
   };
 }
 
-function settingsStoreWithAutoplay(enabled) {
-  return {
-    async get() {
-      return { ...{ defaultVolume: 70, autoplay: enabled, sourcePriority: ['direct', 'spotify', 'youtube'] } };
-    },
-    async update() { return {}; },
-  };
-}
-
-test('tryAutoplay returns null when autoplay is disabled', async () => {
+test('fetchAutoplayTrack returns null when history is empty', async () => {
   const node = new FakeNode();
-  const player = new MusicPlayer(fakeShoukaku(node), undefined, {
-    settingsStore: settingsStoreWithAutoplay(false),
-  });
+  const player = new MusicPlayer(fakeShoukaku(node));
 
-  const state = player.queueManager.getState('g');
-  state.currentTrack = ytTrack('aaaaaaaaaaa');
-  state.history = [ytTrack('aaaaaaaaaaa')];
-
-  const result = await player.tryAutoplay('g');
+  const result = await player.fetchAutoplayTrack('g');
   assert.equal(result, null);
   assert.equal(node.calls.length, 0);
 });
 
-test('tryAutoplay picks first mix track not in history', async () => {
+test('fetchAutoplayTrack picks first mix track not in history', async () => {
   const seedId = 'aaaaaaaaaaa';
   const alreadyPlayed = 'bbbbbbbbbbb';
   const targetId = 'ccccccccccc';
@@ -89,46 +74,38 @@ test('tryAutoplay picks first mix track not in history', async () => {
       data: { tracks: [ytTrack(seedId), ytTrack(alreadyPlayed), ytTrack(targetId)] },
     });
 
-  const player = new MusicPlayer(fakeShoukaku(node), undefined, {
-    settingsStore: settingsStoreWithAutoplay(true),
-  });
+  const player = new MusicPlayer(fakeShoukaku(node));
 
   const state = player.queueManager.getState('g');
-  state.currentTrack = ytTrack(seedId);
-  state.history = [ytTrack(alreadyPlayed), ytTrack(seedId)];
+  state.history = [ytTrack(seedId), ytTrack(alreadyPlayed)];
 
-  const picked = await player.tryAutoplay('g');
+  const picked = await player.fetchAutoplayTrack('g');
   assert.equal(picked.encoded, `enc-${targetId}`);
-  assert.equal(picked.requestedByName, 'autoplay');
-  assert.equal(picked.requestedByUserId, null);
 });
 
-test('tryAutoplay falls through to ytmsearch when mix returns empty', async () => {
+test('fetchAutoplayTrack falls through to ytsearch when mix returns empty', async () => {
   const seedId = 'aaaaaaaaaaa';
   const targetId = 'zzzzzzzzzzz';
 
   const node = new FakeNode()
     .on((id) => id.startsWith('https://www.youtube.com/watch'), { loadType: 'empty', data: null })
-    .on((id) => id.startsWith('ytmsearch:'), {
+    .on((id) => id.startsWith('ytsearch:'), {
       loadType: 'search',
       data: [ytTrack(seedId), ytTrack(targetId)],
     });
 
-  const player = new MusicPlayer(fakeShoukaku(node), undefined, {
-    settingsStore: settingsStoreWithAutoplay(true),
-  });
+  const player = new MusicPlayer(fakeShoukaku(node));
 
   const state = player.queueManager.getState('g');
-  state.currentTrack = ytTrack(seedId, { author: 'My Band' });
-  state.history = [ytTrack(seedId)];
+  state.history = [ytTrack(seedId, { author: 'My Band' })];
 
-  const picked = await player.tryAutoplay('g');
+  const picked = await player.fetchAutoplayTrack('g');
   assert.equal(picked.encoded, `enc-${targetId}`);
-  const ytmsearchCall = node.calls.find(c => c.startsWith('ytmsearch:'));
-  assert.equal(ytmsearchCall, 'ytmsearch:My Band');
+  const ytsearchCall = node.calls.find(c => c.startsWith('ytsearch:'));
+  assert.equal(ytsearchCall, 'ytsearch:My Band');
 });
 
-test('tryAutoplay falls through to ytmsearch when seed has no YouTube id', async () => {
+test('fetchAutoplayTrack falls through to ytsearch when seed has no YouTube id', async () => {
   const targetId = 'qqqqqqqqqqq';
 
   const seed = {
@@ -143,45 +120,19 @@ test('tryAutoplay falls through to ytmsearch when seed has no YouTube id', async
   };
 
   const node = new FakeNode()
-    .on((id) => id.startsWith('ytmsearch:'), {
+    .on((id) => id.startsWith('ytsearch:'), {
       loadType: 'search',
       data: [ytTrack(targetId)],
     });
 
-  const player = new MusicPlayer(fakeShoukaku(node), undefined, {
-    settingsStore: settingsStoreWithAutoplay(true),
-  });
+  const player = new MusicPlayer(fakeShoukaku(node));
 
   const state = player.queueManager.getState('g');
   state.currentTrack = seed;
   state.history = [seed];
 
-  const picked = await player.tryAutoplay('g');
+  const picked = await player.fetchAutoplayTrack('g');
   assert.equal(picked.encoded, `enc-${targetId}`);
   const mixCall = node.calls.find(c => c.startsWith('https://www.youtube.com/watch'));
   assert.equal(mixCall, undefined, 'mix should not be attempted without seed videoId');
-});
-
-test('tryAutoplay sends an autoplay-miss embed when nothing is found', async () => {
-  const sent = [];
-  const textChannel = {
-    async send(payload) { sent.push(payload); return { id: 'msg' }; },
-  };
-
-  const node = new FakeNode(); // returns empty for everything
-
-  const player = new MusicPlayer(fakeShoukaku(node), undefined, {
-    settingsStore: settingsStoreWithAutoplay(true),
-  });
-
-  const state = player.queueManager.getState('g');
-  state.currentTrack = ytTrack('aaaaaaaaaaa');
-  state.history = [ytTrack('aaaaaaaaaaa')];
-  state.textChannel = textChannel;
-
-  const result = await player.tryAutoplay('g');
-  assert.equal(result, null);
-  assert.equal(sent.length, 1);
-  const embed = sent[0].embeds?.[0];
-  assert.ok(embed, 'should send an embed payload');
 });

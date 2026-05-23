@@ -1,11 +1,10 @@
-import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('loop')
     .setDescription('Toggle loop mode for the queue')
-    .setContexts(InteractionContextType.Guild)
     .addStringOption(option =>
       option.setName('mode')
         .setDescription('Loop mode to set')
@@ -16,14 +15,11 @@ export default {
           { name: 'Queue', value: 'queue' }
         )),
 
-  async execute(interaction, client, shoukaku) {
+  async execute(interaction, client) {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before changing loop mode.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Voice Required', 'Join a voice channel before changing loop mode.', false));
     }
 
     const mode = interaction.options.getString('mode');
@@ -39,10 +35,7 @@ export default {
         loopMode = 2;
         break;
       default:
-        return interaction.editReply({
-          embeds: [buildActionFeedback('Loop Mode', 'That loop mode is not valid.', false)],
-          components: [],
-        });
+        return interaction.editReply(buildActionFeedback('Loop Mode', 'That loop mode is not valid.', false));
     }
 
     try {
@@ -50,10 +43,7 @@ export default {
       return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Loop Updated');
     } catch (error) {
       client.logger.error('Error in loop command', error);
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Loop Update Failed', 'There was an error while trying to set the loop mode.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Loop Update Failed', 'There was an error while trying to set the loop mode.', false));
     }
   },
 };

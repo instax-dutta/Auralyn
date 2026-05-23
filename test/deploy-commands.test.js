@@ -7,7 +7,6 @@ test('deployment targets global commands when no guild ids are set', () => {
   const targets = getCommandDeploymentTargets({
     clientId: 'client',
     guildId: undefined,
-    guildIds: [],
   });
 
   assert.deepEqual(targets, [
@@ -15,15 +14,13 @@ test('deployment targets global commands when no guild ids are set', () => {
   ]);
 });
 
-test('deployment targets only guild scope when guild ids are configured', () => {
+test('deployment targets only guild scope when guild id is configured', () => {
   const targets = getCommandDeploymentTargets({
     clientId: 'client',
     guildId: 'guild',
-    guildIds: ['guild', 'guild-two'],
   });
 
   assert.deepEqual(targets, [
     { scope: 'guild', clientId: 'client', guildId: 'guild' },
-    { scope: 'guild', clientId: 'client', guildId: 'guild-two' },
   ]);
 });

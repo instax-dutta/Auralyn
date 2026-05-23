@@ -1,20 +1,16 @@
-import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, buildQueueReply } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('shuffle')
-    .setDescription('Shuffle the queue')
-    .setContexts(InteractionContextType.Guild),
+    .setDescription('Shuffle the queue'),
 
-  async execute(interaction, client, shoukaku) {
+  async execute(interaction, client) {
     await interaction.deferReply();
 
     if (!interaction.member.voice.channel) {
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Voice Required', 'Join a voice channel before shuffling the queue.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Voice Required', 'Join a voice channel before shuffling the queue.', false));
     }
 
     try {
@@ -22,10 +18,7 @@ export default {
       return interaction.editReply(buildQueueReply(client, interaction.guildId));
     } catch (error) {
       client.logger.error('Error in shuffle command', error);
-      return interaction.editReply({
-        embeds: [buildActionFeedback('Shuffle Failed', 'There was an error while trying to shuffle the queue.', false)],
-        components: [],
-      });
+      return interaction.editReply(buildActionFeedback('Shuffle Failed', 'There was an error while trying to shuffle the queue.', false));
     }
   },
 };
