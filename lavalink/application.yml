@@ -63,6 +63,7 @@ plugins:
     spotify:
       clientId: "${SPOTIFY_CLIENT_ID:}"
       clientSecret: "${SPOTIFY_CLIENT_SECRET:}"
+      spDc: "${SPOTIFY_SP_DC:}"
       countryCode: "US"
-      playlistLoadLimit: 0
-      albumLoadLimit: 0
+      playlistLoadLimit: 100
+      albumLoadLimit: 100

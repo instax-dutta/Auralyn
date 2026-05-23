@@ -1,5 +1,8 @@
 import { LoadType } from 'shoukaku';
 import { DEFAULT_SOURCE_PRIORITY } from './guild-settings.js';
+import { isSpotifyUrl, resolveSpotifyMetadata } from './spotify-resolver.js';
+
+const SPOTIFY_YT_SEARCH_CONCURRENCY = 5;
 
 const URL_PATTERN = /^https?:\/\//i;
 const SEARCH_SOURCE_PREFIXES = new Set(['ytsearch', 'ytmsearch', 'scsearch', 'spsearch']);
@@ -14,7 +17,6 @@ export function extractYoutubeVideoId(uri) {
 
 const SOURCE_PREFIX_MAP = {
   youtube: 'ytsearch',
-  spotify: 'spsearch',
   soundcloud: 'scsearch',
 };
 
@@ -174,13 +176,84 @@ function shapeSearchResult(result, query) {
   return { track: best, playlist: null };
 }
 
+async function searchYoutubeForSpotifyTrack(node, spotifyTrack) {
+  const query = spotifyTrack.artist
+    ? `${spotifyTrack.title} ${spotifyTrack.artist}`
+    : spotifyTrack.title;
+
+  const result = await node.rest.resolve(`ytsearch:${query}`);
+  if (!result || result.loadType !== LoadType.SEARCH) return null;
+  const candidates = Array.isArray(result.data) ? result.data : [];
+  if (candidates.length === 0) return null;
+
+  const best = pickBestSearchResult(candidates, query);
+  if (!best) return null;
+
+  return {
+    ...best,
+    info: {
+      ...best.info,
+      title: spotifyTrack.title,
+      author: spotifyTrack.artist || best.info?.author || 'Unknown',
+      artworkUrl: spotifyTrack.artworkUrl || best.info?.artworkUrl || null,
+    },
+  };
+}
+
+async function resolveSpotifyViaYouTube(node, spotifyUrl) {
+  let metadata;
+  try {
+    metadata = await resolveSpotifyMetadata(spotifyUrl);
+  } catch (error) {
+    console.warn(`[spotify-resolver] Failed to fetch Spotify metadata for ${spotifyUrl}: ${error.message}`);
+    return { track: null, playlist: null, sourceName: null };
+  }
+
+  if (!metadata || metadata.tracks.length === 0) {
+    return { track: null, playlist: null, sourceName: null };
+  }
+
+  const resolved = [];
+  for (let i = 0; i < metadata.tracks.length; i += SPOTIFY_YT_SEARCH_CONCURRENCY) {
+    const batch = metadata.tracks.slice(i, i + SPOTIFY_YT_SEARCH_CONCURRENCY);
+    const results = await Promise.all(batch.map(t =>
+      searchYoutubeForSpotifyTrack(node, t).catch(err => {
+        console.warn(`[spotify-resolver] YouTube search failed for "${t.title}": ${err.message}`);
+        return null;
+      }),
+    ));
+    for (const track of results) if (track) resolved.push(track);
+  }
+
+  if (resolved.length === 0) {
+    return { track: null, playlist: null, sourceName: null };
+  }
+
+  if (metadata.type === 'track') {
+    return { track: resolved[0], playlist: null, sourceName: 'spotify' };
+  }
+
+  return {
+    track: resolved[0],
+    playlist: {
+      info: { name: metadata.name, selectedTrack: 0 },
+      tracks: resolved,
+    },
+    sourceName: 'spotify',
+  };
+}
+
 async function tryResolveFromSource(shoukaku, query, sourceName) {
   const node = shoukaku.getIdealNode();
   if (!node) throw new Error('No connected Lavalink node is available.');
 
   if (sourceName === 'direct') {
-    if (!isDirectUrl(query)) return { track: null, playlist: null, sourceName: null };
-    const result = await node.rest.resolve(query.trim());
+    const trimmed = query.trim();
+    if (!isDirectUrl(trimmed)) return { track: null, playlist: null, sourceName: null };
+    if (isSpotifyUrl(trimmed)) {
+      return resolveSpotifyViaYouTube(node, trimmed);
+    }
+    const result = await node.rest.resolve(trimmed);
     if (result?.loadType === LoadType.ERROR) return { track: null, playlist: null, sourceName: null };
     const shaped = shapeResolvedResult(result);
     return { ...shaped, sourceName: 'direct' };
