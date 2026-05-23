@@ -425,6 +425,58 @@ export class MusicPlayer {
     return !current;
   }
 
+  async previous(guildId) {
+    const state = this.queueManager.getState(guildId);
+    const history = this.queueManager.getHistory(guildId);
+    if (history.length === 0) return null;
+
+    const prevTrack = history.shift();
+    if (state.currentTrack) {
+      state.queue.unshift(state.currentTrack);
+    }
+    state.currentTrack = null;
+
+    const player = state.lavalinkPlayer;
+    if (player) {
+      await player.stopTrack();
+    }
+
+    await this.persistGuildState(guildId);
+    return this.playNext(guildId);
+  }
+
+  async enqueueFront({ guildId, track, textChannel, voiceChannel }) {
+    const state = this.queueManager.getState(guildId);
+    state.textChannel = textChannel;
+    state.voiceChannel = voiceChannel;
+
+    const nextTrack = {
+      ...track,
+      requestedByUserId: track.requestedByUserId ?? null,
+      requestedByName: track.requestedByName ?? null,
+    };
+
+    this.queueManager.enqueueFront(guildId, nextTrack);
+
+    const settings = await this.getGuildSettings(guildId);
+    if (state.volume !== settings.defaultVolume) {
+      await this.setVolume(guildId, settings.defaultVolume);
+    }
+
+    await this.persistGuildState(guildId);
+
+    if (!state.isPlaying) {
+      await this.playNext(guildId, { skipNotification: true });
+    }
+
+    return state;
+  }
+
+  set247(guildId, enabled) {
+    this.queueManager.setStayInVC(guildId, enabled);
+    this.logger.info(`24/7 mode ${enabled ? 'enabled' : 'disabled'} for guild ${guildId}`);
+  }
+
   async fetchAutoplayTrack(guildId) {
     const history = this.queueManager.getHistory(guildId);
     const seed = history[0];

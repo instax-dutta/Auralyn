@@ -36,6 +36,12 @@ export default {
     if (humanMembers.size > 0) return;
 
     const playerState = client.musicPlayer.getPlayerState(guild.id);
+
+    if (playerState?.stayInVC) {
+      client.logger.debug(`Guild ${guild.id} in 24/7 mode, staying in voice channel`);
+      return;
+    }
+
     const textChannel = playerState?.textChannel ?? null;
 
     try {

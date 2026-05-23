@@ -29,6 +29,7 @@ export class QueueManager {
         voiceChannel: null,
         lavalinkPlayer: null,
         listeners: null,
+        stayInVC: false,
       });
     }
     return this.players.get(guildId);
@@ -45,6 +46,20 @@ export class QueueManager {
     const state = this.getState(guildId);
     state.queue.push(...tracks);
     this.logger.info(`Enqueued ${tracks.length} tracks`);
+  }
+
+  enqueueFront(guildId, track) {
+    const state = this.getState(guildId);
+    state.queue.unshift(track);
+    this.logger.info(`Enqueued front: ${track?.info?.title ?? 'unknown'}`);
+    return state;
+  }
+
+  removeBefore(guildId, position) {
+    const state = this.getState(guildId);
+    const index = position - 1;
+    if (!Number.isInteger(index) || index < 1 || index > state.queue.length) return;
+    state.queue.splice(0, index);
   }
 
   getNextTrack(state) {
@@ -210,6 +225,14 @@ export class QueueManager {
     this.getState(guildId).filterPreset = preset;
   }
 
+  getStayInVC(guildId) {
+    return this.getState(guildId).stayInVC;
+  }
+
+  setStayInVC(guildId, enabled) {
+    this.getState(guildId).stayInVC = enabled;
+  }
+
   getAutoplay(guildId) {
     return this.getState(guildId).autoplay;
   }
@@ -229,6 +252,7 @@ export class QueueManager {
       loopMode: state.loopMode,
       filterPreset: state.filterPreset,
       autoplay: state.autoplay,
+      stayInVC: state.stayInVC,
     };
   }
 }
