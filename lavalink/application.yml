@@ -20,10 +20,17 @@ lavalink:
       local: true
     plugins:
       - lapix: true
-    bufferDurationMs: 400
-    frameBufferDurationMs: 10000
-    opusEncodingQuality: 10
-    resamplingQuality: HIGH
+    # Quality vs resilience tuning. Discord forwards our exact Opus stream to every
+    # listener; the bot can only control what it sends out, not per-listener network.
+    # So: encode at max quality, buffer generously to absorb source-side YouTube
+    # jitter, and minimise GC pauses that would cause audible dropouts.
+    bufferDurationMs: 500              # source-side jitter buffer (default 400)
+    frameBufferDurationMs: 10000       # player-side Opus frame buffer (default 5000)
+    opusEncodingQuality: 10            # 0-10, max quality
+    resamplingQuality: HIGH            # LOW / MEDIUM / HIGH — best fidelity
+    useSeekGhosting: true              # smoother user-initiated seeks
+    trackStuckThresholdMs: 10000       # give slow sources 10s before declaring stuck
+    nonAllocatingFrameBuffer: true     # zero-alloc ring buffer → fewer GC pauses
     gcWarnings: false
     playlistFetchLimit: 10
     playlistSearchLimit: 10
