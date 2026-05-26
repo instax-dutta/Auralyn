@@ -43,6 +43,18 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
+    # Ordered client list. The plugin tries each in turn; first to succeed wins.
+    # MUSIC (YT Music) uses different auth and is the most reliable for music.
+    # TVHTML5EMBEDDED is anonymous and historically the last to break.
+    # WEB / WEBEMBEDDED / MWEB require PoToken increasingly often — kept as fallbacks.
+    # ANDROID_VR is kept last because YouTube has been actively breaking it.
+    clients:
+      - MUSIC
+      - TVHTML5EMBEDDED
+      - WEBEMBEDDED
+      - WEB
+      - MWEB
+      - ANDROID_VR
 
   lavasrc:
     providers:
