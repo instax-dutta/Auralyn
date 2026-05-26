@@ -53,7 +53,7 @@ plugins:
     # Ordered client list. The plugin tries each in turn; first to succeed wins.
     # MUSIC (YT Music) uses different auth and is the most reliable for music.
     # TVHTML5EMBEDDED is anonymous and historically the last to break.
-    # WEB / WEBEMBEDDED / MWEB require PoToken increasingly often — kept as fallbacks.
+    # WEB / WEBEMBEDDED / MWEB are kept as fallbacks.
     # ANDROID_VR is kept last because YouTube has been actively breaking it.
     clients:
       - MUSIC
@@ -62,14 +62,6 @@ plugins:
       - WEB
       - MWEB
       - ANDROID_VR
-    # Proof-of-Origin Token unlocks the higher-quality WEB-family Opus streams
-    # that YouTube now gates behind anti-bot checks. Without it those clients
-    # fall back to lower-bitrate AAC formats (or fail outright). Generate with
-    # https://github.com/iv-org/youtube-trusted-session-generator and supply
-    # both values via env vars; absence is safe (plugin just skips PoToken).
-    pot:
-      token: "${YOUTUBE_PO_TOKEN:}"
-      visitorData: "${YOUTUBE_VISITOR_DATA:}"
 
   lavasrc:
     providers:

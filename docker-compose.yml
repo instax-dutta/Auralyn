@@ -20,8 +20,6 @@ services:
       - LAVALINK_STARTUP_TIMEOUT=${LAVALINK_STARTUP_TIMEOUT:-90}
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
-      - YOUTUBE_PO_TOKEN=${YOUTUBE_PO_TOKEN:-}
-      - YOUTUBE_VISITOR_DATA=${YOUTUBE_VISITOR_DATA:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

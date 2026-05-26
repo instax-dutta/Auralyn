@@ -107,26 +107,6 @@
       "user_editable": true,
       "rules": "nullable|string",
       "field_type": "text"
-    },
-    {
-      "name": "YouTube PoToken",
-      "description": "Optional Proof-of-Origin token for YouTube. Unlocks higher-bitrate Opus streams gated by anti-bot checks. Generate alongside Visitor Data via iv-org/youtube-trusted-session-generator. Refresh every few weeks.",
-      "env_variable": "YOUTUBE_PO_TOKEN",
-      "default_value": "",
-      "user_viewable": false,
-      "user_editable": true,
-      "rules": "nullable|string",
-      "field_type": "text"
-    },
-    {
-      "name": "YouTube Visitor Data",
-      "description": "Companion to YOUTUBE_PO_TOKEN. Must be the visitorData value the token was issued with — always rotate as a pair.",
-      "env_variable": "YOUTUBE_VISITOR_DATA",
-      "default_value": "",
-      "user_viewable": false,
-      "user_editable": true,
-      "rules": "nullable|string",
-      "field_type": "text"
     }
   ]
 }
