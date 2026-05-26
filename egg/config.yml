@@ -22,6 +22,8 @@ environment:
   LAVALINK_STARTUP_TIMEOUT: "90"
   SPOTIFY_CLIENT_ID: ""
   SPOTIFY_CLIENT_SECRET: ""
+  YOUTUBE_PO_TOKEN: ""
+  YOUTUBE_VISITOR_DATA: ""
 security:
   required_private_variables:
     - DISCORD_TOKEN

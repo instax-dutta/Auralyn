@@ -11,6 +11,7 @@ import { deployCommands, deployCommandsForGuild } from './utils/deploy-commands.
 import { RateLimiter } from './utils/rate-limiter.js';
 import { Telemetry } from './utils/telemetry.js';
 import { checkSpotifyCredentials } from './utils/spotify-check.js';
+import { getSpotifyYtCache } from './utils/spotify-yt-cache.js';
 
 dotenv.config();
 
@@ -103,6 +104,9 @@ const shutdown = async (signal) => {
       logger.error(`Failed to disconnect guild ${guildId}`, error);
     });
   }
+  await getSpotifyYtCache().flush().catch(error => {
+    logger.warn(`Failed to flush Spotify→YT cache: ${error.message}`);
+  });
   client.destroy();
   process.exit(0);
 };

@@ -1,6 +1,7 @@
 import { LoadType } from 'shoukaku';
 import { DEFAULT_SOURCE_PRIORITY } from './guild-settings.js';
 import { isSpotifyUrl, resolveSpotifyMetadata } from './spotify-resolver.js';
+import { getSpotifyYtCache } from './spotify-yt-cache.js';
 
 const SPOTIFY_YT_SEARCH_CONCURRENCY = 5;
 
@@ -186,11 +187,9 @@ function shapeSearchResult(result, query) {
 }
 
 // Cache Spotify→YouTube search results so re-queuing the same playlist (or
-// shared songs across different playlists) doesn't re-hit YouTube. Keyed by
+// shared songs across different playlists) doesn't re-hit YouTube. Persisted
+// to disk via SpotifyYtCache so the cache survives bot restarts. Keyed by
 // Spotify track ID when available, falling back to title+artist.
-const SPOTIFY_YT_CACHE = new Map();
-const SPOTIFY_YT_CACHE_TTL_MS = 60 * 60_000;
-const SPOTIFY_YT_CACHE_MAX = 5000;
 
 function spotifyCacheKey(spotifyTrack) {
   return spotifyTrack.id
@@ -198,20 +197,11 @@ function spotifyCacheKey(spotifyTrack) {
     : `q:${(spotifyTrack.title || '').toLowerCase()}::${(spotifyTrack.artist || '').toLowerCase()}`;
 }
 
-function pruneSpotifyCache() {
-  const now = Date.now();
-  for (const [k, entry] of SPOTIFY_YT_CACHE) {
-    if (entry.expiresAt <= now) SPOTIFY_YT_CACHE.delete(k);
-  }
-  while (SPOTIFY_YT_CACHE.size > SPOTIFY_YT_CACHE_MAX) {
-    SPOTIFY_YT_CACHE.delete(SPOTIFY_YT_CACHE.keys().next().value);
-  }
-}
-
 async function searchYoutubeForSpotifyTrack(node, spotifyTrack) {
+  const cache = getSpotifyYtCache();
   const cacheKey = spotifyCacheKey(spotifyTrack);
-  const cached = SPOTIFY_YT_CACHE.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
 
   const query = spotifyTrack.artist
     ? `${spotifyTrack.title} ${spotifyTrack.artist}`
@@ -235,8 +225,7 @@ async function searchYoutubeForSpotifyTrack(node, spotifyTrack) {
     },
   };
 
-  SPOTIFY_YT_CACHE.set(cacheKey, { value: shaped, expiresAt: Date.now() + SPOTIFY_YT_CACHE_TTL_MS });
-  pruneSpotifyCache();
+  cache.set(cacheKey, shaped);
   return shaped;
 }
 

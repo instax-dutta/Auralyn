@@ -62,6 +62,14 @@ plugins:
       - WEB
       - MWEB
       - ANDROID_VR
+    # Proof-of-Origin Token unlocks the higher-quality WEB-family Opus streams
+    # that YouTube now gates behind anti-bot checks. Without it those clients
+    # fall back to lower-bitrate AAC formats (or fail outright). Generate with
+    # https://github.com/iv-org/youtube-trusted-session-generator and supply
+    # both values via env vars; absence is safe (plugin just skips PoToken).
+    pot:
+      token: "${YOUTUBE_PO_TOKEN:}"
+      visitorData: "${YOUTUBE_VISITOR_DATA:}"
 
   lavasrc:
     providers:
