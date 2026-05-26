@@ -64,9 +64,18 @@ export function normalizeSearchQuery(query, prefix = 'ytsearch') {
   return `${prefix}:${trimmed}`;
 }
 
+// Process-wide resolver singleton. Without this every /play call would create
+// a fresh empty cache and re-query YouTube for songs we just resolved.
+let defaultResolver = null;
+function getDefaultResolver() {
+  if (!defaultResolver) {
+    defaultResolver = createTrackResolver({ ttlMs: 30 * 60_000, maxEntries: 1000 });
+  }
+  return defaultResolver;
+}
+
 export async function resolveTrack(shoukaku, query, { sourcePriority = DEFAULT_SOURCE_PRIORITY } = {}) {
-  const resolver = createTrackResolver();
-  return resolver.resolve(shoukaku, query, { sourcePriority });
+  return getDefaultResolver().resolve(shoukaku, query, { sourcePriority });
 }
 
 function shapeResolvedResult(result) {
@@ -176,7 +185,34 @@ function shapeSearchResult(result, query) {
   return { track: best, playlist: null };
 }
 
+// Cache Spotify→YouTube search results so re-queuing the same playlist (or
+// shared songs across different playlists) doesn't re-hit YouTube. Keyed by
+// Spotify track ID when available, falling back to title+artist.
+const SPOTIFY_YT_CACHE = new Map();
+const SPOTIFY_YT_CACHE_TTL_MS = 60 * 60_000;
+const SPOTIFY_YT_CACHE_MAX = 5000;
+
+function spotifyCacheKey(spotifyTrack) {
+  return spotifyTrack.id
+    ? `id:${spotifyTrack.id}`
+    : `q:${(spotifyTrack.title || '').toLowerCase()}::${(spotifyTrack.artist || '').toLowerCase()}`;
+}
+
+function pruneSpotifyCache() {
+  const now = Date.now();
+  for (const [k, entry] of SPOTIFY_YT_CACHE) {
+    if (entry.expiresAt <= now) SPOTIFY_YT_CACHE.delete(k);
+  }
+  while (SPOTIFY_YT_CACHE.size > SPOTIFY_YT_CACHE_MAX) {
+    SPOTIFY_YT_CACHE.delete(SPOTIFY_YT_CACHE.keys().next().value);
+  }
+}
+
 async function searchYoutubeForSpotifyTrack(node, spotifyTrack) {
+  const cacheKey = spotifyCacheKey(spotifyTrack);
+  const cached = SPOTIFY_YT_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
   const query = spotifyTrack.artist
     ? `${spotifyTrack.title} ${spotifyTrack.artist}`
     : spotifyTrack.title;
@@ -189,7 +225,7 @@ async function searchYoutubeForSpotifyTrack(node, spotifyTrack) {
   const best = pickBestSearchResult(candidates, query);
   if (!best) return null;
 
-  return {
+  const shaped = {
     ...best,
     info: {
       ...best.info,
@@ -198,6 +234,10 @@ async function searchYoutubeForSpotifyTrack(node, spotifyTrack) {
       artworkUrl: spotifyTrack.artworkUrl || best.info?.artworkUrl || null,
     },
   };
+
+  SPOTIFY_YT_CACHE.set(cacheKey, { value: shaped, expiresAt: Date.now() + SPOTIFY_YT_CACHE_TTL_MS });
+  pruneSpotifyCache();
+  return shaped;
 }
 
 async function resolveSpotifyViaYouTube(node, spotifyUrl) {
