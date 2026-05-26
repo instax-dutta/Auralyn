@@ -21,7 +21,9 @@ const RECOVERABLE_VOICE_CLOSE_CODES = new Set([1000, 1001, 1006, 4006, 4014, 401
 function isFilterPayloadMeaningful(filters) {
   if (!filters) return false;
   for (const value of Object.values(filters)) {
-    if (value !== null && value !== undefined) return true;
+    if (value === null || value === undefined) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    return true;
   }
   return false;
 }
