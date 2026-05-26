@@ -11,14 +11,19 @@ export default {
         .setDescription('The EQ preset to apply')
         .setRequired(true)
         .addChoices(
-          { name: 'Flat — no EQ (default)', value: 'flat'      },
-          { name: 'Balanced',               value: 'balanced'  },
-          { name: 'Bass Boost',             value: 'bass'      },
-          { name: 'Treble Boost',           value: 'treble'    },
-          { name: 'Nightcore',          value: 'nightcore' },
-          { name: '8D Audio',           value: '8d'        },
-          { name: 'Karaoke',            value: 'karaoke'   },
-          { name: 'Speed Up',           value: 'speed'     },
+          { name: '⏸️ Flat — no EQ (default)', value: 'flat'      },
+          { name: '🎚️ Balanced',              value: 'balanced'  },
+          { name: '🔊 Bass Boost',             value: 'bass'      },
+          { name: '🔔 Treble Boost',           value: 'treble'    },
+          { name: '🌙 Nightcore',              value: 'nightcore' },
+          { name: '🌀 8D Audio',               value: '8d'        },
+          { name: '🎤 Karaoke',                value: 'karaoke'   },
+          { name: '⚡ Speed Up',               value: 'speed'     },
+          { name: '🎻 Classical',              value: 'classical' },
+          { name: '🎷 Jazz',                   value: 'jazz'      },
+          { name: '🤘 Metal',                  value: 'metal'     },
+          { name: '🎵 Pop',                    value: 'pop'       },
+          { name: '🎸 Rock',                   value: 'rock'      },
         )),
 
   async execute(interaction, client) {

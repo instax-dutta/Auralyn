@@ -153,7 +153,7 @@ When `voteSkipEnabled` and `voteSkipThreshold`% of non-bot voice members vote, `
 ### Audio & Filters
 | Command | Description |
 |---|---|
-| `/filter <preset>` | Apply DSP preset (8 choices) |
+| `/filter <preset>` | Apply DSP preset (13 choices) |
 | `/lyrics [query]` | Fetch lyrics via LRClib |
 
 ### Session Settings

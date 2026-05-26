@@ -8,6 +8,24 @@ import { AuralynColors } from '../utils/embeds.js';
 
 const END_REASONS_THAT_SHOULD_ADVANCE = new Set(['finished', 'loadFailed']);
 
+// Discord voice WS close codes that are recoverable — shoukaku will rebuild the
+// transport and Lavalink keeps the player state alive across the gap. We must NOT
+// tear down the queue/session on these or 24/7 + queue-loop will break mid-playlist.
+// 4014: disconnected by Discord (channel deleted / kicked / region moved)
+// 4015: voice server crashed (Discord auto-reconnects)
+// 4006: session no longer valid (auto-renegotiates)
+// 1000/1001: normal/going-away — usually our own move
+// 1006: abnormal closure — pure network blip
+const RECOVERABLE_VOICE_CLOSE_CODES = new Set([1000, 1001, 1006, 4006, 4014, 4015]);
+
+function isFilterPayloadMeaningful(filters) {
+  if (!filters) return false;
+  for (const value of Object.values(filters)) {
+    if (value !== null && value !== undefined) return true;
+  }
+  return false;
+}
+
 export class MusicPlayer {
   constructor(shoukaku, logger = createSilentLogger(), {
     settingsStore = null,
@@ -178,7 +196,7 @@ export class MusicPlayer {
 
     const preset = this.queueManager.getFilterPreset(guildId) ?? DEFAULT_FILTER;
     const filters = FILTER_PRESETS[preset];
-    if (filters && Object.keys(filters).length > 0) {
+    if (isFilterPayloadMeaningful(filters)) {
       await player.setFilters(filters);
     }
 
@@ -266,7 +284,20 @@ export class MusicPlayer {
   }
 
   async handleConnectionClosed(guildId, event) {
-    this.logger.warn(`Voice connection closed in guild ${guildId}`, event);
+    const code = event?.code;
+    // Voice WS closes happen routinely during long sessions (region migration,
+    // server reroute, transient packet loss). Shoukaku handles reconnection and
+    // Lavalink preserves the player state. Previously this handler unconditionally
+    // called stop(), which wiped the queue mid-playlist regardless of LOOP_QUEUE
+    // or 24/7 mode. We now only log; legitimate channel-empty teardown is handled
+    // by voiceStateUpdate.js and explicit /stop/disconnect.
+    if (RECOVERABLE_VOICE_CLOSE_CODES.has(code) || code === undefined) {
+      this.logger.warn(`Voice connection closed in guild ${guildId} (code=${code ?? 'unknown'}) — letting shoukaku reconnect`);
+      return;
+    }
+    // Truly fatal code (e.g. 4004 authentication failed, 4011 server not found,
+    // 4016 unknown encryption mode). The voice session can't be recovered.
+    this.logger.error(`Voice connection closed with fatal code ${code} in guild ${guildId} — tearing down session`, event);
     await this.stop(guildId);
   }
 
