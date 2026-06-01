@@ -163,7 +163,7 @@ async function resolveViaSpotifyApi(url) {
   }
 
   if (parsed.type === 'album') {
-    const meta = await spotifyApiGet(`/albums/${parsed.id}?fields=name,images,tracks(total)`, token);
+    const meta = await spotifyApiGet(`/albums/${parsed.id}`, token);
     const albumArtwork = pickLargestImage(meta.images);
     const tracks = await fetchAllPages(
       `/albums/${parsed.id}/tracks?limit=${SPOTIFY_PAGE_LIMIT}`,
@@ -195,7 +195,13 @@ async function resolveViaSpotifyApi(url) {
 // ---------- Fallback path (no creds): spotify-url-info embed scrape, capped at ~100) ----------
 
 async function resolveViaEmbedScrape(url) {
-  const data = await getData(url);
+  let data;
+  try {
+    data = await getData(url);
+  } catch (err) {
+    console.warn(`[spotify-resolver] Embed scrape failed for ${url}: ${err.message}`);
+    return null;
+  }
 
   if (data.type === 'artist' || data.type === 'episode') {
     return null;
