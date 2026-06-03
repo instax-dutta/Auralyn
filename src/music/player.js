@@ -49,31 +49,53 @@ export class MusicPlayer {
     if (!message?.edit) return;
     this.stopNowPlayingRefresh(guildId);
     let consecutiveFails = 0;
-    let currentInterval = 30_000;
-    const MAX_INTERVAL = 120_000;
+    const BASE_INTERVAL = 60_000;
+    const MAX_INTERVAL = 240_000;
+    let currentInterval = BASE_INTERVAL;
+    let lastPayloadKey = null;
     const tick = async () => {
       const state = this.queueManager.getState(guildId);
       if (!state?.isPlaying || !state?.currentTrack) {
         this.stopNowPlayingRefresh(guildId);
         return;
       }
+      // Skip the edit when paused — position is frozen, nothing to refresh.
+      if (state.isPaused) {
+        const entry = this.nowPlayingMessages.get(guildId);
+        if (entry) {
+          clearTimeout(entry.timer);
+          entry.timer = setTimeout(tick, currentInterval);
+        }
+        return;
+      }
+      const payload = buildNowPlayingPayload({
+        track: state.currentTrack,
+        position: state.lavalinkPlayer?.position ?? 0,
+        volume: state.volume,
+        loopMode: state.loopMode,
+        queueLength: state.queue.length,
+        autoplay: state.autoplay,
+        guildId,
+        isPaused: state.isPaused,
+      });
+      // Dedup: only edit when something meaningful changed (volume/loop/queueLen/autoplay/paused/trackId).
+      const trackId = state.currentTrack?.info?.identifier ?? state.currentTrack?.encoded ?? '';
+      const payloadKey = `${trackId}|${state.volume}|${state.loopMode}|${state.queue.length}|${state.autoplay ? 1 : 0}|${state.isPaused ? 1 : 0}`;
+      if (payloadKey === lastPayloadKey) {
+        const entry = this.nowPlayingMessages.get(guildId);
+        if (entry) {
+          clearTimeout(entry.timer);
+          entry.timer = setTimeout(tick, currentInterval);
+        }
+        return;
+      }
       try {
-        await message.edit(
-          buildNowPlayingPayload({
-            track: state.currentTrack,
-            position: state.lavalinkPlayer?.position ?? 0,
-            volume: state.volume,
-            loopMode: state.loopMode,
-            queueLength: state.queue.length,
-            autoplay: state.autoplay,
-            guildId,
-            isPaused: state.isPaused,
-          }),
-        );
+        await message.edit(payload);
+        lastPayloadKey = payloadKey;
         consecutiveFails = 0;
-        if (currentInterval !== 30_000) {
-          currentInterval = 30_000;
-          this.logger.debug(`nowPlayingRefresh reset to 30s for guild ${guildId}`);
+        if (currentInterval !== BASE_INTERVAL) {
+          currentInterval = BASE_INTERVAL;
+          this.logger.debug(`nowPlayingRefresh reset to ${BASE_INTERVAL}ms for guild ${guildId}`);
         }
       } catch {
         consecutiveFails += 1;
@@ -208,6 +230,10 @@ export class MusicPlayer {
   }
 
   async playNext(guildId, { skipNotification = false } = {}) {
+    // Capture the existing now-playing message before stopping the refresh tick,
+    // so we can edit it in-place instead of sending a new message on each track.
+    // This is the main spam vector during loop / 24/7 stress tests.
+    const existingNowPlaying = this.nowPlayingMessages.get(guildId)?.message ?? null;
     this.stopNowPlayingRefresh(guildId);
     const state = this.queueManager.getState(guildId);
     const nextTrack = this.queueManager.getNextTrack(state);
@@ -217,13 +243,8 @@ export class MusicPlayer {
         const autoTrack = await this.fetchAutoplayTrack(guildId);
         if (autoTrack) {
           this.queueManager.enqueue(guildId, autoTrack);
-          if (state.textChannel) {
-            state.textChannel.send(buildSimpleV2(
-              'Auralyn | Autoplay',
-              `Autoplaying **[${autoTrack.info?.title ?? 'Unknown'}](${autoTrack.info?.uri ?? ''})** based on your recent listening.`,
-              AuralynColors.info,
-            )).catch(() => {});
-          }
+          // Autoplay announce removed; the next Now Playing message already
+          // shows the 🔄 Autoplay flag, so a separate message was redundant.
           return this.playNext(guildId, { skipNotification: true });
         }
       }
@@ -253,18 +274,31 @@ export class MusicPlayer {
     this.telemetry?.trackTrackPlayed();
 
     if (!skipNotification && state.textChannel) {
-      state.textChannel.send(
-        buildNowPlayingPayload({
-          track: nextTrack,
-          position: 0,
-          volume: state.volume,
-          loopMode: state.loopMode,
-          queueLength: state.queue.length,
-          autoplay: state.autoplay,
-          guildId,
-          isPaused: false,
-        }),
-      ).then(msg => this.startNowPlayingRefresh(guildId, msg)).catch(() => {});
+      const payload = buildNowPlayingPayload({
+        track: nextTrack,
+        position: 0,
+        volume: state.volume,
+        loopMode: state.loopMode,
+        queueLength: state.queue.length,
+        autoplay: state.autoplay,
+        guildId,
+        isPaused: false,
+      });
+
+      // Try to edit the previous now-playing message in place. Falls back to a
+      // new send if no live message exists or the edit fails (deleted, etc.).
+      const sendFresh = () => {
+        state.textChannel.send(payload)
+          .then(msg => this.startNowPlayingRefresh(guildId, msg))
+          .catch(() => {});
+      };
+      if (existingNowPlaying?.edit) {
+        existingNowPlaying.edit(payload)
+          .then(() => this.startNowPlayingRefresh(guildId, existingNowPlaying))
+          .catch(sendFresh);
+      } else {
+        sendFresh();
+      }
     }
 
     await this.persistGuildState(guildId);

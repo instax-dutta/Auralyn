@@ -52,17 +52,18 @@ export const FILTER_PRESETS = {
   }),
 
   // Heavy low-end emphasis with a slight 630–1k dip to keep bass from muddying vocals.
+  // Prior gains hit +17 dB and clipped on opus; capped at ~+10 dB.
   bass: preset({
     equalizer: [
-      band(0,  0.65),
-      band(1,  0.70),
-      band(2,  0.60),
-      band(3,  0.45),
-      band(4,  0.25),
-      band(5,  0.10),
-      band(6,  0.00),
+      band(0,  0.40),
+      band(1,  0.45),
+      band(2,  0.40),
+      band(3,  0.28),
+      band(4,  0.15),
+      band(5,  0.05),
+      band(6, -0.02),
       band(7, -0.05),
-      band(8, -0.05),
+      band(8, -0.03),
       band(9,  0.00),
       band(10, 0.00),
       band(11, 0.00),
@@ -72,7 +73,7 @@ export const FILTER_PRESETS = {
     ],
   }),
 
-  // High-shelf lift starting around 1.6k. Capped at +0.40 to avoid sibilance.
+  // High-shelf lift focused on "air" band (10k+). Lowered 4k/6.3k to dodge sibilance.
   treble: preset({
     equalizer: [
       band(0, -0.05),
@@ -82,14 +83,14 @@ export const FILTER_PRESETS = {
       band(4,  0.00),
       band(5,  0.00),
       band(6,  0.02),
-      band(7,  0.08),
-      band(8,  0.18),
-      band(9,  0.28),
-      band(10, 0.35),
-      band(11, 0.40),
-      band(12, 0.40),
+      band(7,  0.05),
+      band(8,  0.10),
+      band(9,  0.18),
+      band(10, 0.25),
+      band(11, 0.25),
+      band(12, 0.28),
       band(13, 0.35),
-      band(14, 0.30),
+      band(14, 0.35),
     ],
   }),
 
@@ -136,71 +137,73 @@ export const FILTER_PRESETS = {
   }),
 
   // Metal — scooped V-curve with mid-bass thump and biting 2.5k–4k presence.
+  // Tamed 4k peak to reduce ear fatigue on long sessions.
   metal: preset({
     equalizer: [
-      band(0,  0.25),
-      band(1,  0.28),
-      band(2,  0.22),
-      band(3,  0.10),
+      band(0,  0.20),
+      band(1,  0.22),
+      band(2,  0.18),
+      band(3,  0.08),
       band(4, -0.05),
       band(5, -0.12),
       band(6, -0.10),
       band(7, -0.05),
       band(8,  0.05),
-      band(9,  0.18),
-      band(10, 0.28),
-      band(11, 0.30),
-      band(12, 0.25),
-      band(13, 0.18),
-      band(14, 0.10),
+      band(9,  0.15),
+      band(10, 0.22),
+      band(11, 0.22),
+      band(12, 0.18),
+      band(13, 0.12),
+      band(14, 0.08),
     ],
   }),
 
-  // Pop — vocal-forward. Lift 100–250 Hz for warmth and 1k–2.5k for vocal clarity.
+  // Pop — vocal-forward. Pulled 100 Hz down to clear mud; 1k–2.5k lift for vocals.
   pop: preset({
     equalizer: [
-      band(0,  0.05),
-      band(1,  0.08),
-      band(2,  0.12),
-      band(3,  0.15),
-      band(4,  0.10),
-      band(5,  0.05),
+      band(0,  0.02),
+      band(1,  0.05),
+      band(2,  0.08),
+      band(3,  0.08),
+      band(4,  0.05),
+      band(5,  0.02),
       band(6,  0.05),
       band(7,  0.10),
       band(8,  0.12),
       band(9,  0.10),
       band(10, 0.08),
-      band(11, 0.10),
-      band(12, 0.10),
+      band(11, 0.08),
+      band(12, 0.08),
       band(13, 0.05),
       band(14, 0.02),
     ],
   }),
 
   // Rock — classic V-curve. Big kick + bass, scooped low-mids, biting presence.
+  // Reduced 4k spike that fatigued on guitar-heavy mixes.
   rock: preset({
     equalizer: [
-      band(0,  0.20),
-      band(1,  0.25),
-      band(2,  0.20),
-      band(3,  0.10),
+      band(0,  0.18),
+      band(1,  0.22),
+      band(2,  0.18),
+      band(3,  0.08),
       band(4,  0.00),
       band(5, -0.08),
       band(6, -0.10),
       band(7, -0.05),
       band(8,  0.05),
-      band(9,  0.15),
-      band(10, 0.22),
-      band(11, 0.25),
-      band(12, 0.22),
-      band(13, 0.15),
-      band(14, 0.10),
+      band(9,  0.12),
+      band(10, 0.18),
+      band(11, 0.18),
+      band(12, 0.18),
+      band(13, 0.12),
+      band(14, 0.08),
     ],
   }),
 
-  // Classic nightcore: ~1.25× speed and pitch together.
+  // Classic nightcore: ~1.20× speed and pitch together (smoother than 1.25, less chipmunked).
   nightcore: preset({
-    timescale: { speed: 1.25, pitch: 1.25, rate: 1.0 },
+    timescale: { speed: 1.20, pitch: 1.20, rate: 1.0 },
   }),
 
   // Standard 8D rotation rate. 0.2 Hz = one full pan every 5s.
@@ -208,9 +211,10 @@ export const FILTER_PRESETS = {
     rotation: { rotationHz: 0.2 },
   }),
 
-  // Center-channel vocal cancellation tuned to typical vocal band.
+  // Center-channel vocal cancellation. Band centred ~270 Hz (vocal fundamentals) with
+  // a wider 150 Hz skirt — catches more of the vocal range than the prior 220/100 setup.
   karaoke: preset({
-    karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 },
+    karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 270.0, filterWidth: 150.0 },
   }),
 
   // Speed up without raising pitch (chipmunk-free fast playback).

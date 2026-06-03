@@ -7,7 +7,11 @@ LAVALINK_PORT="${LAVALINK_PORT:-2333}"
 LAVALINK_HOST="${LAVALINK_HOST:-127.0.0.1}"
 LAVALINK_MEMORY="${LAVALINK_MEMORY:-1G}"
 LAVALINK_STARTUP_TIMEOUT="${LAVALINK_STARTUP_TIMEOUT:-60}"
-BOT_ENTRYPOINT="${BOT_ENTRYPOINT:-$APP_DIR/src/index.js}"
+# Default to the ShardingManager entrypoint. With TOTAL_SHARDS='auto' this
+# works as a single-shard launcher for small bots and scales transparently
+# past Discord's 2,500-guild-per-shard threshold. Override with
+# BOT_ENTRYPOINT=/app/src/index.js to bypass sharding for local debugging.
+BOT_ENTRYPOINT="${BOT_ENTRYPOINT:-$APP_DIR/src/shard.js}"
 
 require_env() {
     name="$1"

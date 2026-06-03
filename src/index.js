@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Collection } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Events } from 'discord.js';
 import { Connectors, Shoukaku } from 'shoukaku';
 import fs from 'fs';
 import path from 'path';
@@ -16,7 +16,24 @@ import { getSpotifyYtCache } from './utils/spotify-yt-cache.js';
 dotenv.config();
 
 const config = loadConfig();
-const logger = createLogger({ level: config.logLevel, scope: 'auralyn' });
+
+// When launched via ShardingManager, SHARDS=`[<id>]` and SHARD_COUNT=<n> are
+// injected by the manager. Detect them so logs and the Client constructor can
+// carry shard identity. Falls back cleanly to a non-sharded single process.
+const parseShardIds = (raw) => {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+const SHARD_IDS = parseShardIds(process.env.SHARDS);
+const SHARD_COUNT = process.env.SHARD_COUNT ? Number(process.env.SHARD_COUNT) : null;
+const SHARD_TAG = SHARD_IDS && SHARD_COUNT ? `shard-${SHARD_IDS.join(',')}-of-${SHARD_COUNT}` : 'auralyn';
+
+const logger = createLogger({ level: config.logLevel, scope: SHARD_TAG });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -25,10 +42,32 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
   ],
+  // Explicit shards/shardCount so the Client always agrees with the manager.
+  // discord.js also reads SHARDS/SHARD_COUNT env vars, but being explicit
+  // avoids surprises if env vars are stripped by an orchestrator.
+  ...(SHARD_IDS && SHARD_COUNT ? { shards: SHARD_IDS, shardCount: SHARD_COUNT } : {}),
 });
 client.commands = new Collection();
 client.logger = logger;
 client.config = config;
+client.shardInfo = { ids: SHARD_IDS, count: SHARD_COUNT };
+
+client.on(Events.ShardReady, (shardId, unavailableGuilds) => {
+  logger.info(`Shard ${shardId} ready (${unavailableGuilds ? unavailableGuilds.size : 0} unavailable guilds)`);
+});
+client.on(Events.ShardReconnecting, (shardId) => {
+  logger.warn(`Shard ${shardId} reconnecting`);
+  client.telemetry?.trackReconnect?.();
+});
+client.on(Events.ShardResume, (shardId, replayedEvents) => {
+  logger.info(`Shard ${shardId} resumed (${replayedEvents} events replayed)`);
+});
+client.on(Events.ShardDisconnect, (event, shardId) => {
+  logger.warn(`Shard ${shardId} disconnected (code=${event?.code ?? 'n/a'})`);
+});
+client.on(Events.ShardError, (error, shardId) => {
+  logger.error(`Shard ${shardId} websocket error`, error);
+});
 
 const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
