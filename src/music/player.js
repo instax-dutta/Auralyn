@@ -353,8 +353,48 @@ export class MusicPlayer {
     return this.playNext(guildId);
   }
 
+  async join(guildId, voiceChannel, textChannel = null) {
+    const state = this.queueManager.getState(guildId);
+    state.voiceChannel = voiceChannel;
+    if (textChannel) state.textChannel = textChannel;
+    await this.getOrCreateLavalinkPlayer(guildId);
+  }
+
+  async leaveVoiceOnly(guildId) {
+    this.stopNowPlayingRefresh(guildId);
+    this.clearSleepTimer(guildId);
+    this.cleanupGuild(guildId);
+    const state = this.queueManager.getState(guildId);
+    state.isPlaying = false;
+    state.isPaused = false;
+    state.currentTrack = null;
+    // queue preserved intentionally — user passed keep_queue:true
+    await this.shoukaku.leaveVoiceChannel(guildId);
+  }
+
+  enqueueFront(guildId, track) {
+    this.queueManager.enqueueFront(guildId, track);
+  }
+
+  clearSleepTimer(guildId) {
+    const state = this.queueManager.getState(guildId);
+    if (state.sleepTimer) {
+      clearTimeout(state.sleepTimer);
+      state.sleepTimer = null;
+    }
+  }
+
+  setSleepTimer(guildId, ms) {
+    this.clearSleepTimer(guildId);
+    const state = this.queueManager.getState(guildId);
+    state.sleepTimer = setTimeout(() => {
+      this.stop(guildId).catch(() => {});
+    }, ms);
+  }
+
   async stop(guildId) {
     this.stopNowPlayingRefresh(guildId);
+    this.clearSleepTimer(guildId);
     const state = this.queueManager.getState(guildId);
     state.queue = [];
     state.currentTrack = null;

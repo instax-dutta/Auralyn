@@ -10,7 +10,13 @@ function hasDjRole(member, config) {
 export default {
   data: new SlashCommandBuilder()
     .setName('skip')
-    .setDescription('Skip the current track'),
+    .setDescription('Skip the current track (or multiple tracks)')
+    .addIntegerOption(option =>
+      option.setName('amount')
+        .setDescription('Number of tracks to skip (default: 1)')
+        .setMinValue(1)
+        .setMaxValue(50)
+        .setRequired(false)),
 
   async execute(interaction, client) {
     await interaction.deferReply();
@@ -25,6 +31,8 @@ export default {
       return interaction.editReply(buildActionFeedback('Nothing Playing', 'There is nothing playing to skip.', false));
     }
 
+    const amount = interaction.options.getInteger('amount') ?? 1;
+
     const humanCount = voiceChannel.members.filter(m => !m.user.bot).size;
     if (humanCount > VOTESKIP_THRESHOLD && !hasDjRole(interaction.member, client.config)) {
       return interaction.editReply(buildActionFeedback(
@@ -35,11 +43,18 @@ export default {
     }
 
     try {
-      const nextTrack = await client.musicPlayer.skip(interaction.guildId);
-      if (!nextTrack) {
-        return interaction.editReply(buildActionFeedback('Skip', 'There is nothing to skip right now.', false));
+      // Drop (amount - 1) upcoming tracks then let skip() advance naturally.
+      if (amount > 1) {
+        const qState = client.musicPlayer.queueManager.getState(interaction.guildId);
+        qState.queue.splice(0, amount - 1);
       }
-      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Track Skipped');
+
+      const nextTrack = await client.musicPlayer.skip(interaction.guildId);
+      const label = amount > 1 ? `Skipped ${amount} Tracks` : 'Track Skipped';
+      if (!nextTrack) {
+        return interaction.editReply(buildActionFeedback('Skip', `Skipped ${amount} track${amount === 1 ? '' : 's'}. Queue is now empty.`));
+      }
+      return replyWithPlayerSnapshot(interaction, client, interaction.guildId, `Auralyn | ${label}`);
     } catch (error) {
       client.logger.error('Error in skip command', error);
       return interaction.editReply(buildActionFeedback('Skip Failed', 'There was an error while trying to skip the track.', false));

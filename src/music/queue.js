@@ -30,6 +30,7 @@ export class QueueManager {
         lavalinkPlayer: null,
         listeners: null,
         stayInVC: false,
+        sleepTimer: null,
       });
     }
     return this.players.get(guildId);
@@ -191,6 +192,13 @@ export class QueueManager {
 
   getHistory(guildId) {
     return this.getState(guildId).history;
+  }
+
+  removeIf(guildId, predicate) {
+    const state = this.getState(guildId);
+    const before = state.queue.length;
+    state.queue = state.queue.filter(t => !predicate(t));
+    return before - state.queue.length;
   }
 
   clearQueue(guildId) {
