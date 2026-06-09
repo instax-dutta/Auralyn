@@ -145,12 +145,13 @@ export class MusicPlayer {
 
     this.queueManager.enqueue(guildId, nextTrack);
 
-    const settings = await this.getGuildSettings(guildId);
-    if (state.volume !== settings.defaultVolume) {
-      await this.setVolume(guildId, settings.defaultVolume);
-    }
-
-    await this.persistGuildState(guildId);
+    // Fire settings check + persist async — don't block playback on disk I/O.
+    this.getGuildSettings(guildId).then(settings => {
+      if (state.volume !== settings.defaultVolume) {
+        this.setVolume(guildId, settings.defaultVolume).catch(() => {});
+      }
+      void this.persistGuildState(guildId);
+    }).catch(() => {});
 
     if (!state.isPlaying) {
       this.logger.debug(`Guild ${guildId} is idle, starting playback`);
@@ -171,12 +172,12 @@ export class MusicPlayer {
 
     this.queueManager.enqueueBulk(guildId, tracks);
 
-    const settings = await this.getGuildSettings(guildId);
-    if (state.volume !== settings.defaultVolume) {
-      await this.setVolume(guildId, settings.defaultVolume);
-    }
-
-    await this.persistGuildState(guildId);
+    this.getGuildSettings(guildId).then(settings => {
+      if (state.volume !== settings.defaultVolume) {
+        this.setVolume(guildId, settings.defaultVolume).catch(() => {});
+      }
+      void this.persistGuildState(guildId);
+    }).catch(() => {});
 
     if (!state.isPlaying) {
       await this.playNext(guildId, { skipNotification: true });
@@ -301,7 +302,7 @@ export class MusicPlayer {
       }
     }
 
-    await this.persistGuildState(guildId);
+    void this.persistGuildState(guildId);
     return nextTrack;
   }
 
@@ -349,7 +350,7 @@ export class MusicPlayer {
       await player.stopTrack();
     }
 
-    await this.persistGuildState(guildId);
+    void this.persistGuildState(guildId);
     return this.playNext(guildId);
   }
 
