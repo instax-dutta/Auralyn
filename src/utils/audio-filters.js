@@ -221,6 +221,98 @@ export const FILTER_PRESETS = {
   speed: preset({
     timescale: { speed: 1.25, pitch: 1.0, rate: 1.0 },
   }),
+
+  // Lo-fi: slightly slowed, warm low-pass filtering.
+  lofi: preset({
+    timescale: { speed: 0.85, pitch: 1.0, rate: 1.0 },
+    lowPass: { smoothing: 20.0 },
+  }),
+
+  // Daycore: slowed with slight pitch drop, softer feel than slowed.
+  daycore: preset({
+    timescale: { speed: 0.8, pitch: 0.95, rate: 1.0 },
+  }),
+
+  // Slowed + reverb-adjacent: slowed + pitch down together.
+  slowed: preset({
+    timescale: { speed: 0.75, pitch: 0.85, rate: 1.0 },
+  }),
+
+  // Slowmo: extreme slow without pitch change.
+  slowmo: preset({
+    timescale: { speed: 0.65, pitch: 1.0, rate: 1.0 },
+  }),
+
+  // Speed up aggressively without pitch change.
+  speedup: preset({
+    timescale: { speed: 1.5, pitch: 1.0, rate: 1.0 },
+  }),
+
+  // Vaporwave: slowed + pitch down + subtle bass warmth.
+  vaporwave: preset({
+    timescale: { speed: 0.85, pitch: 0.85, rate: 1.0 },
+    equalizer: [
+      band(0, 0.10),
+      band(1, 0.12),
+      band(2, 0.08),
+    ],
+  }),
+
+  // Chipmunk: noticeable pitch-up without ear fatigue. 1.25 pitch = +5 semitones, not 8.
+  chipmunk: preset({
+    timescale: { speed: 1.05, pitch: 1.25, rate: 1.0 },
+  }),
+
+  // Darth Vader: deep pitch (-6 semitones), no distortion — distortion causes harshness.
+  darthvader: preset({
+    timescale: { speed: 1.0, pitch: 0.65, rate: 1.0 },
+  }),
+
+  // Vibration: gentle periodic wobble. 6 Hz vibrato at moderate depth, soft tremolo.
+  // Prior 14 Hz / depth 1.0 was nauseating. These values match natural voice vibrato.
+  vibration: preset({
+    vibrato: { frequency: 6.0, depth: 0.4 },
+    tremolo: { frequency: 4.0, depth: 0.25 },
+  }),
+
+  // Terriblebass: still punchy but capped at +8 dB max — no clipping.
+  terriblebass: preset({
+    equalizer: [
+      band(0,  0.35),
+      band(1,  0.40),
+      band(2,  0.35),
+      band(3,  0.20),
+      band(4,  0.05),
+      band(5, -0.05),
+      band(6, -0.05),
+    ],
+  }),
+
+  // Bass Low: gentle lift, good for background listening.
+  bass_low: preset({
+    equalizer: [
+      band(0,  0.15),
+      band(1,  0.18),
+      band(2,  0.15),
+      band(3,  0.08),
+      band(4,  0.03),
+    ],
+  }),
+
+  // Bass High: strong sub hit, stays below the 0.45 safe ceiling.
+  bass_high: preset({
+    equalizer: [
+      band(0,  0.42),
+      band(1,  0.45),
+      band(2,  0.38),
+      band(3,  0.25),
+      band(4,  0.12),
+      band(5,  0.04),
+      band(6, -0.02),
+      band(7, -0.05),
+      band(8, -0.03),
+    ],
+  }),
 };
 
 export const DEFAULT_FILTER = 'flat';
@@ -239,4 +331,16 @@ export const FILTER_LABELS = {
   metal:     '🤘 Metal',
   pop:       '🎵 Pop',
   rock:      '🎸 Rock',
+  lofi:      '📻 Lo-Fi',
+  daycore:   '🌤️ Daycore',
+  slowed:    '🐢 Slowed',
+  slowmo:    '🔬 Slow Motion',
+  speedup:   '🚀 Speed Up+',
+  vaporwave: '🌊 Vaporwave',
+  chipmunk:  '🐿️ Chipmunk',
+  darthvader:'😈 Darth Vader',
+  vibration: '〰️ Vibration',
+  terriblebass: '💀 Terrible Bass',
+  bass_low:  '🔉 Bass Low',
+  bass_high: '🔈 Bass High',
 };

@@ -24,6 +24,16 @@ export default {
           { name: '🤘 Metal',                  value: 'metal'     },
           { name: '🎵 Pop',                    value: 'pop'       },
           { name: '🎸 Rock',                   value: 'rock'      },
+          { name: '📻 Lo-Fi',                  value: 'lofi'      },
+          { name: '🌤️ Daycore',               value: 'daycore'   },
+          { name: '🐢 Slowed',                 value: 'slowed'    },
+          { name: '🌊 Vaporwave',              value: 'vaporwave' },
+          { name: '🐿️ Chipmunk',              value: 'chipmunk'  },
+          { name: '😈 Darth Vader',            value: 'darthvader'},
+          { name: '〰️ Vibration',              value: 'vibration' },
+          { name: '💀 Terrible Bass',          value: 'terriblebass'},
+          { name: '🔉 Bass Low',               value: 'bass_low'  },
+          { name: '🔈 Bass High',              value: 'bass_high' },
         )),
 
   async execute(interaction, client) {
