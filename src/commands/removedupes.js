@@ -21,9 +21,11 @@ export default {
 
     const seen = new Set();
     const removed = client.musicPlayer.queueManager.removeIf(interaction.guildId, t => {
-      const uri = t.info?.uri ?? t.encoded;
-      if (seen.has(uri)) return true;
-      seen.add(uri);
+      // identifier = video ID (most stable); uri fallback for non-YouTube; skip if neither
+      const key = t.info?.identifier ?? t.info?.uri;
+      if (!key) return false;
+      if (seen.has(key)) return true;
+      seen.add(key);
       return false;
     });
 
@@ -31,9 +33,9 @@ export default {
       return interaction.editReply(buildActionFeedback('No Duplicates', 'No duplicate tracks found in the queue.'));
     }
 
-    return interaction.editReply({
-      ...buildQueueReply(client, interaction.guildId),
-      content: `Removed **${removed}** duplicate${removed === 1 ? '' : 's'}.`,
-    });
+    return interaction.editReply(buildActionFeedback(
+      'Duplicates Removed',
+      `Removed **${removed}** duplicate${removed === 1 ? '' : 's'}. Use \`/queue\` to see the updated queue.`,
+    ));
   },
 };

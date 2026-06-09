@@ -369,6 +369,8 @@ export class MusicPlayer {
     state.isPaused = false;
     state.currentTrack = null;
     // queue preserved intentionally — user passed keep_queue:true
+    // Flag tells voiceStateUpdate to skip the players.delete() wipe
+    state.preserveQueueOnLeave = true;
     await this.shoukaku.leaveVoiceChannel(guildId);
   }
 
@@ -571,33 +573,6 @@ export class MusicPlayer {
 
     await this.persistGuildState(guildId);
     return this.playNext(guildId);
-  }
-
-  async enqueueFront({ guildId, track, textChannel, voiceChannel }) {
-    const state = this.queueManager.getState(guildId);
-    state.textChannel = textChannel;
-    state.voiceChannel = voiceChannel;
-
-    const nextTrack = {
-      ...track,
-      requestedByUserId: track.requestedByUserId ?? null,
-      requestedByName: track.requestedByName ?? null,
-    };
-
-    this.queueManager.enqueueFront(guildId, nextTrack);
-
-    const settings = await this.getGuildSettings(guildId);
-    if (state.volume !== settings.defaultVolume) {
-      await this.setVolume(guildId, settings.defaultVolume);
-    }
-
-    await this.persistGuildState(guildId);
-
-    if (!state.isPlaying) {
-      await this.playNext(guildId, { skipNotification: true });
-    }
-
-    return state;
   }
 
   set247(guildId, enabled) {

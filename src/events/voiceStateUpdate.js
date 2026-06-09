@@ -11,8 +11,14 @@ export default {
     if (movingUserId === botId) {
       const guildId = oldState.guild.id;
       if (oldState.channelId && !newState.channelId) {
-        client.musicPlayer.cleanupGuild(guildId);
-        client.musicPlayer.players.delete(guildId);
+        const qState = client.musicPlayer.queueManager.getState(guildId);
+        if (qState.preserveQueueOnLeave) {
+          // leaveVoiceOnly() already called cleanupGuild() — just clear the flag
+          qState.preserveQueueOnLeave = false;
+        } else {
+          client.musicPlayer.cleanupGuild(guildId);
+          client.musicPlayer.players.delete(guildId);
+        }
         client.telemetry?.trackVoiceDisconnected();
       } else if (!oldState.channelId && newState.channelId) {
         client.telemetry?.trackVoiceConnected();

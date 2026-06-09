@@ -31,6 +31,7 @@ export class QueueManager {
         listeners: null,
         stayInVC: false,
         sleepTimer: null,
+        preserveQueueOnLeave: false,
       });
     }
     return this.players.get(guildId);

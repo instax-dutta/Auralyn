@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { buildActionFeedback, buildQueueReply } from '../utils/music-ui.js';
+import { buildActionFeedback } from '../utils/music-ui.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -32,9 +32,9 @@ export default {
       return interaction.editReply(buildActionFeedback('Leave Cleanup', 'No tracks to remove — all requesters are still in the channel.'));
     }
 
-    return interaction.editReply({
-      ...buildQueueReply(client, interaction.guildId),
-      content: `Removed **${removed}** track${removed === 1 ? '' : 's'} from absent members.`,
-    });
+    return interaction.editReply(buildActionFeedback(
+      'Leave Cleanup',
+      `Removed **${removed}** track${removed === 1 ? '' : 's'} from absent members. Use \`/queue\` to see the updated queue.`,
+    ));
   },
 };

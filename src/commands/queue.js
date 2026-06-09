@@ -53,10 +53,10 @@ export default {
       if (!track) {
         return interaction.editReply(buildActionFeedback('Invalid Position', `Position \`${position}\` is out of range.`, false));
       }
-      return interaction.editReply({
-        ...buildQueueReply(client, guildId),
-        content: `Removed **${track.info?.title ?? 'Unknown'}** from position ${position}.`,
-      });
+      return interaction.editReply(buildActionFeedback(
+        'Track Removed',
+        `Removed **${track.info?.title ?? 'Unknown'}** from position ${position}. Use \`/queue\` to see the updated queue.`,
+      ));
     }
 
     if (sub === 'move') {
@@ -70,10 +70,10 @@ export default {
         const qLen = (client.musicPlayer.getPlayerState(guildId).queue ?? []).length;
         return interaction.editReply(buildActionFeedback('Invalid Position', `Queue has **${qLen}** track${qLen === 1 ? '' : 's'}.`, false));
       }
-      return interaction.editReply({
-        ...buildQueueReply(client, guildId),
-        content: `Moved **${track.info?.title ?? 'Unknown'}** from position ${from} to ${to}.`,
-      });
+      return interaction.editReply(buildActionFeedback(
+        'Track Moved',
+        `Moved **${track.info?.title ?? 'Unknown'}** from position ${from} to ${to}. Use \`/queue\` to see the updated queue.`,
+      ));
     }
 
     if (sub === 'clear') {
@@ -102,22 +102,23 @@ export default {
         return interaction.editReply(
           removed === 0
             ? buildActionFeedback('Leave Cleanup', 'No tracks to remove — all requesters are present.')
-            : { ...buildQueueReply(client, guildId), content: `Removed **${removed}** track${removed === 1 ? '' : 's'} from absent members.` },
+            : buildActionFeedback('Leave Cleanup', `Removed **${removed}** track${removed === 1 ? '' : 's'} from absent members. Use \`/queue\` to see the updated queue.`),
         );
       }
 
       if (kind === 'duplicates') {
         const seen = new Set();
         const removed = client.musicPlayer.queueManager.removeIf(guildId, t => {
-          const uri = t.info?.uri ?? t.encoded;
-          if (seen.has(uri)) return true;
-          seen.add(uri);
+          const key = t.info?.identifier ?? t.info?.uri;
+          if (!key) return false;
+          if (seen.has(key)) return true;
+          seen.add(key);
           return false;
         });
         return interaction.editReply(
           removed === 0
             ? buildActionFeedback('No Duplicates', 'No duplicate tracks found.')
-            : { ...buildQueueReply(client, guildId), content: `Removed **${removed}** duplicate${removed === 1 ? '' : 's'}.` },
+            : buildActionFeedback('Duplicates Removed', `Removed **${removed}** duplicate${removed === 1 ? '' : 's'}. Use \`/queue\` to see the updated queue.`),
         );
       }
     }
