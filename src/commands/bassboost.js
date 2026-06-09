@@ -1,6 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
-import { FILTER_LABELS } from '../utils/audio-filters.js';
 
 const LEVEL_MAP = {
   low:    'bass_low',
