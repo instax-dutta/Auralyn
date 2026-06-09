@@ -318,9 +318,69 @@ export const FILTER_PRESETS = {
 
 export const DEFAULT_FILTER = 'flat';
 
+// Pairs of presets that cannot coexist — applying one while the other is active
+// is rejected with a user-facing error. Bidirectional (A blocks B and B blocks A).
+// Goal: preserve audio quality by preventing combinations that clip, nauseate, or cancel.
+export const STACK_CONFLICTS = new Set([
+  '8d:vibration',        // dual spatial (rotation + vibrato) → nausea
+  'vibration:8d',
+  'karaoke:vibration',   // vocal suppression + wobble → pointless degradation
+  'vibration:karaoke',
+  // vibration + any timescale → pitch wobble layered over speed warp = unpredictable
+  'vibration:nightcore', 'nightcore:vibration',
+  'vibration:daycore',   'daycore:vibration',
+  'vibration:slowed',    'slowed:vibration',
+  'vibration:slowmo',    'slowmo:vibration',
+  'vibration:speedup',   'speedup:vibration',
+  'vibration:chipmunk',  'chipmunk:vibration',
+  'vibration:darthvader','darthvader:vibration',
+  'vibration:lofi',      'lofi:vibration',
+  'vibration:vaporwave', 'vaporwave:vibration',
+  'vibration:speed',     'speed:vibration',
+  // terriblebass is solo-only — stacking amplifies an already extreme preset
+  'terriblebass:8d',        '8d:terriblebass',
+  'terriblebass:karaoke',   'karaoke:terriblebass',
+  'terriblebass:vibration', 'vibration:terriblebass',
+]);
+
+// Human-readable reason for each blocked pairing (keyed by sorted pair).
+export const STACK_CONFLICT_REASONS = {
+  '8d:vibration':        '8D rotation + Vibration both affect stereo spatialization — this combo causes audio nausea.',
+  'karaoke:vibration':   'Vibration wobble over a karaoke-suppressed center channel produces unpredictable artifacts.',
+  'terriblebass:8d':     'Terrible Bass is an extreme preset — stacking other effects on top will clip and distort.',
+  'terriblebass:karaoke':'Terrible Bass is an extreme preset — stacking other effects on top will clip and distort.',
+  'terriblebass:vibration':'Terrible Bass is an extreme preset — stacking other effects on top will clip and distort.',
+};
+
+function getConflictReason(a, b) {
+  const key = [a, b].sort().join(':');
+  return STACK_CONFLICT_REASONS[key] ?? 'These two filters conflict and would degrade audio quality.';
+}
+
+// Presets that must run on a clean slate — applying one resets all other layers first.
+// These are either extreme (terriblebass) or intentionally self-contained experiences
+// that sound wrong when layered (lofi, vaporwave, darthvader, chipmunk).
+export const SOLO_PRESETS = new Set([
+  'terriblebass',
+  'lofi',
+  'vaporwave',
+  'darthvader',
+  'chipmunk',
+]);
+
+export function checkStackConflict(incomingPreset, activeLayers) {
+  for (const activePreset of Object.values(activeLayers)) {
+    if (!activePreset || activePreset === 'flat') continue;
+    if (STACK_CONFLICTS.has(`${incomingPreset}:${activePreset}`)) {
+      return { blocked: true, reason: getConflictReason(incomingPreset, activePreset), conflictsWith: activePreset };
+    }
+  }
+  return { blocked: false };
+}
+
 // Maps each preset to its exclusive "layer slot". Presets in the same layer
 // are mutually exclusive — applying one clears the previous in that slot.
-// Presets in different layers stack independently.
+// Presets in different layers stack independently (subject to STACK_CONFLICTS above).
 export const PRESET_LAYER = {
   // EQ slot — one EQ curve at a time
   flat:         'eq',

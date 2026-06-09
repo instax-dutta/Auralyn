@@ -19,7 +19,8 @@ export default {
     }
 
     try {
-      await client.musicPlayer.setFilter(interaction.guildId, '8d');
+      const result = await client.musicPlayer.setFilter(interaction.guildId, '8d');
+      if (!result.ok) return interaction.editReply(buildActionFeedback('Filter Conflict', result.reason, false));
       return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Filter — 🌀 8D Audio');
     } catch (error) {
       client.logger.error('Error in 8d command', error);

@@ -51,7 +51,10 @@ export default {
     const preset = interaction.options.getString('preset');
 
     try {
-      await client.musicPlayer.setFilter(interaction.guildId, preset);
+      const result = await client.musicPlayer.setFilter(interaction.guildId, preset);
+      if (!result.ok) {
+        return interaction.editReply(buildActionFeedback('Filter Conflict', result.reason, false));
+      }
       return replyWithPlayerSnapshot(interaction, client, interaction.guildId, `Auralyn | Filter — ${FILTER_LABELS[preset]}`);
     } catch (error) {
       client.logger.error('Error in filter command', error);

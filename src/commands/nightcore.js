@@ -19,7 +19,8 @@ export default {
     }
 
     try {
-      await client.musicPlayer.setFilter(interaction.guildId, 'nightcore');
+      const result = await client.musicPlayer.setFilter(interaction.guildId, 'nightcore');
+      if (!result.ok) return interaction.editReply(buildActionFeedback('Filter Conflict', result.reason, false));
       return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Filter — 🌙 Nightcore');
     } catch (error) {
       client.logger.error('Error in nightcore command', error);

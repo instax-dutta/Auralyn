@@ -39,7 +39,8 @@ export default {
     const preset = LEVEL_MAP[level];
 
     try {
-      await client.musicPlayer.setFilter(interaction.guildId, preset);
+      const result = await client.musicPlayer.setFilter(interaction.guildId, preset);
+      if (!result.ok) return interaction.editReply(buildActionFeedback('Filter Conflict', result.reason, false));
       const label = level === 'off' ? '⏸️ Flat (no EQ)' : `🔊 Bass Boost — ${level.charAt(0).toUpperCase() + level.slice(1)}`;
       return replyWithPlayerSnapshot(interaction, client, interaction.guildId, `Auralyn | ${label}`);
     } catch (error) {

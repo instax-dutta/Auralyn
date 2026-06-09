@@ -2,7 +2,7 @@ import { LoadType } from 'shoukaku';
 import { createSilentLogger } from '../utils/logger.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { QueueManager, LOOP_TRACK } from './queue.js';
-import { FILTER_PRESETS, DEFAULT_FILTER, PRESET_LAYER } from '../utils/audio-filters.js';
+import { FILTER_PRESETS, DEFAULT_FILTER, PRESET_LAYER, SOLO_PRESETS, checkStackConflict } from '../utils/audio-filters.js';
 import { buildNowPlayingPayload, buildSimpleV2 } from '../utils/music-ui.js';
 import { AuralynColors } from '../utils/embeds.js';
 
@@ -533,6 +533,7 @@ export class MusicPlayer {
     return combined;
   }
 
+  // Returns { ok: true, preset } on success, or { ok: false, reason } on conflict.
   async setFilter(guildId, preset) {
     if (!FILTER_PRESETS[preset]) throw new Error(`Unknown filter preset: ${preset}`);
 
@@ -542,9 +543,19 @@ export class MusicPlayer {
     }
 
     if (preset === 'flat') {
-      // Full reset — clear all layers
       state.filterLayers = { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+    } else if (SOLO_PRESETS.has(preset)) {
+      // Solo preset — wipe all layers then apply clean
+      state.filterLayers = { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+      const layer = PRESET_LAYER[preset];
+      if (layer) state.filterLayers[layer] = preset;
     } else {
+      // Check cross-layer conflicts before applying
+      const conflict = checkStackConflict(preset, state.filterLayers);
+      if (conflict.blocked) {
+        return { ok: false, reason: conflict.reason, conflictsWith: conflict.conflictsWith };
+      }
+
       const layer = PRESET_LAYER[preset];
       if (layer) {
         // Toggle: applying the same preset again clears that layer
@@ -563,10 +574,9 @@ export class MusicPlayer {
       await player.setFilters(this.buildCombinedFilter(guildId));
     }
 
-    // Immediately refresh the now-playing embed so filter change is visible
     this._refreshNowPlayingEmbed(guildId);
 
-    return preset;
+    return { ok: true, preset };
   }
 
   _refreshNowPlayingEmbed(guildId) {

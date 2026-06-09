@@ -19,7 +19,8 @@ export default {
     }
 
     try {
-      await client.musicPlayer.setFilter(interaction.guildId, 'karaoke');
+      const result = await client.musicPlayer.setFilter(interaction.guildId, 'karaoke');
+      if (!result.ok) return interaction.editReply(buildActionFeedback('Filter Conflict', result.reason, false));
       return replyWithPlayerSnapshot(interaction, client, interaction.guildId, 'Auralyn | Filter — 🎤 Karaoke');
     } catch (error) {
       client.logger.error('Error in karaoke command', error);
