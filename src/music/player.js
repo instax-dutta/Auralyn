@@ -2,7 +2,7 @@ import { LoadType } from 'shoukaku';
 import { createSilentLogger } from '../utils/logger.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { QueueManager, LOOP_TRACK } from './queue.js';
-import { FILTER_PRESETS, DEFAULT_FILTER } from '../utils/audio-filters.js';
+import { FILTER_PRESETS, DEFAULT_FILTER, PRESET_LAYER } from '../utils/audio-filters.js';
 import { buildNowPlayingPayload, buildSimpleV2 } from '../utils/music-ui.js';
 import { AuralynColors } from '../utils/embeds.js';
 
@@ -219,8 +219,7 @@ export class MusicPlayer {
     const volume = this.queueManager.getVolume(guildId);
     await player.setGlobalVolume(volume);
 
-    const preset = this.queueManager.getFilterPreset(guildId) ?? DEFAULT_FILTER;
-    const filters = FILTER_PRESETS[preset];
+    const filters = this.buildCombinedFilter(guildId);
     if (isFilterPayloadMeaningful(filters)) {
       await player.setFilters(filters);
     }
@@ -487,17 +486,106 @@ export class MusicPlayer {
     return positionMs;
   }
 
+  buildCombinedFilter(guildId) {
+    const state = this.queueManager.getState(guildId);
+    const layers = state.filterLayers ?? { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+
+    const combined = {
+      equalizer: [],
+      karaoke: null,
+      timescale: null,
+      tremolo: null,
+      vibrato: null,
+      rotation: null,
+      distortion: null,
+      channelMix: null,
+      lowPass: null,
+    };
+
+    // EQ layer
+    const eqPreset = layers.eq && layers.eq !== 'flat' ? FILTER_PRESETS[layers.eq] : null;
+    if (eqPreset) {
+      combined.equalizer = eqPreset.equalizer ?? [];
+      if (eqPreset.lowPass) combined.lowPass = eqPreset.lowPass;
+    }
+
+    // Timescale layer (lofi adds lowPass, vaporwave adds EQ if no explicit EQ active)
+    if (layers.timescale) {
+      const tp = FILTER_PRESETS[layers.timescale];
+      combined.timescale = tp.timescale ?? null;
+      combined.distortion = tp.distortion ?? null;
+      if (tp.lowPass) combined.lowPass = tp.lowPass;
+      // vaporwave has subtle EQ — apply only when no explicit EQ preset is active
+      if (tp.equalizer?.length > 0 && (!layers.eq || layers.eq === 'flat')) {
+        combined.equalizer = tp.equalizer;
+      }
+    }
+
+    // Independent layers
+    if (layers.rotation) combined.rotation = FILTER_PRESETS[layers.rotation]?.rotation ?? null;
+    if (layers.karaoke) combined.karaoke = FILTER_PRESETS[layers.karaoke]?.karaoke ?? null;
+    if (layers.vibrato) {
+      const vp = FILTER_PRESETS[layers.vibrato];
+      combined.vibrato = vp?.vibrato ?? null;
+      combined.tremolo = vp?.tremolo ?? null;
+    }
+
+    return combined;
+  }
+
   async setFilter(guildId, preset) {
     if (!FILTER_PRESETS[preset]) throw new Error(`Unknown filter preset: ${preset}`);
+
+    const state = this.queueManager.getState(guildId);
+    if (!state.filterLayers) {
+      state.filterLayers = { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+    }
+
+    if (preset === 'flat') {
+      // Full reset — clear all layers
+      state.filterLayers = { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+    } else {
+      const layer = PRESET_LAYER[preset];
+      if (layer) {
+        // Toggle: applying the same preset again clears that layer
+        if (state.filterLayers[layer] === preset) {
+          state.filterLayers[layer] = layer === 'eq' ? 'flat' : null;
+        } else {
+          state.filterLayers[layer] = preset;
+        }
+      }
+    }
 
     this.queueManager.setFilterPreset(guildId, preset);
 
     const player = this.queueManager.getLavalinkPlayer(guildId);
     if (player) {
-      await player.setFilters(FILTER_PRESETS[preset]);
+      await player.setFilters(this.buildCombinedFilter(guildId));
     }
 
+    // Immediately refresh the now-playing embed so filter change is visible
+    this._refreshNowPlayingEmbed(guildId);
+
     return preset;
+  }
+
+  _refreshNowPlayingEmbed(guildId) {
+    const entry = this.nowPlayingMessages.get(guildId);
+    if (!entry?.message?.edit) return;
+    const state = this.queueManager.getState(guildId);
+    if (!state?.isPlaying || !state?.currentTrack) return;
+    entry.message.edit(
+      buildNowPlayingPayload({
+        track: state.currentTrack,
+        position: state.lavalinkPlayer?.position ?? 0,
+        volume: state.volume,
+        loopMode: state.loopMode,
+        queueLength: state.queue.length,
+        autoplay: state.autoplay,
+        guildId,
+        isPaused: state.isPaused,
+      }),
+    ).catch(() => {});
   }
 
   shuffle(guildId) {

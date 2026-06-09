@@ -51,18 +51,19 @@ export const FILTER_PRESETS = {
     ],
   }),
 
-  // Heavy low-end emphasis with a slight 630–1k dip to keep bass from muddying vocals.
-  // Prior gains hit +17 dB and clipped on opus; capped at ~+10 dB.
+  // Bass boost — peaks at 100 Hz (kick punch) not 25 Hz (sub rumble).
+  // Boosting sub-bass hard clips the opus output and sounds grainy.
+  // Gentle curve: sub stays modest, punch band leads, dip at 630-1k for clarity.
   bass: preset({
     equalizer: [
-      band(0,  0.40),
-      band(1,  0.45),
-      band(2,  0.40),
-      band(3,  0.28),
-      band(4,  0.15),
-      band(5,  0.05),
-      band(6, -0.02),
-      band(7, -0.05),
+      band(0,  0.10),
+      band(1,  0.16),
+      band(2,  0.22),
+      band(3,  0.25),
+      band(4,  0.20),
+      band(5,  0.10),
+      band(6,  0.00),
+      band(7, -0.03),
       band(8, -0.03),
       band(9,  0.00),
       band(10, 0.00),
@@ -316,6 +317,40 @@ export const FILTER_PRESETS = {
 };
 
 export const DEFAULT_FILTER = 'flat';
+
+// Maps each preset to its exclusive "layer slot". Presets in the same layer
+// are mutually exclusive — applying one clears the previous in that slot.
+// Presets in different layers stack independently.
+export const PRESET_LAYER = {
+  // EQ slot — one EQ curve at a time
+  flat:         'eq',
+  balanced:     'eq',
+  bass:         'eq',
+  bass_low:     'eq',
+  bass_high:    'eq',
+  treble:       'eq',
+  classical:    'eq',
+  jazz:         'eq',
+  metal:        'eq',
+  pop:          'eq',
+  rock:         'eq',
+  terriblebass: 'eq',
+  // Timescale slot — one pitch/speed transform at a time
+  nightcore:    'timescale',
+  daycore:      'timescale',
+  slowed:       'timescale',
+  slowmo:       'timescale',
+  speedup:      'timescale',
+  chipmunk:     'timescale',
+  darthvader:   'timescale',
+  speed:        'timescale',
+  lofi:         'timescale',     // timescale + lowPass
+  vaporwave:    'timescale',     // timescale + subtle EQ
+  // Independent slots — stack freely with EQ and timescale
+  '8d':         'rotation',
+  karaoke:      'karaoke',
+  vibration:    'vibrato',
+};
 
 export const FILTER_LABELS = {
   flat:      '⏸️ Flat (no EQ)',

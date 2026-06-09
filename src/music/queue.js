@@ -32,6 +32,7 @@ export class QueueManager {
         stayInVC: false,
         sleepTimer: null,
         preserveQueueOnLeave: false,
+        filterLayers: { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null },
       });
     }
     return this.players.get(guildId);
