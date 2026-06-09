@@ -152,7 +152,7 @@ async function resolveViaSpotifyApi(url) {
   const token = await getSpotifyAccessToken(creds);
 
   if (parsed.type === 'playlist') {
-    const meta = await spotifyApiGet(`/playlists/${parsed.id}?fields=name,images,tracks(total)`, token);
+    const meta = await spotifyApiGet(`/playlists/${parsed.id}?fields=name,images`, token);
     const playlistArtwork = pickLargestImage(meta.images);
     const tracks = await fetchAllPages(
       `/playlists/${parsed.id}/tracks?limit=${SPOTIFY_PAGE_LIMIT}&fields=next,items(track(name,artists(name),duration_ms,uri,is_local,album(images)))`,
