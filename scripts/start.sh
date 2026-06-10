@@ -57,7 +57,22 @@ echo "Runtime: Node $(node --version), Java $(java -version 2>&1 | head -n 1)"
 echo "Lavalink: $LAVALINK_HOST:$LAVALINK_PORT"
 
 cd "$LAVALINK_DIR"
-java -Xmx"$LAVALINK_MEMORY" -jar Lavalink.jar \
+# JVM tuning for audio DSP performance:
+#   -server           : force server-mode JIT (C2 compiler) from the start
+#   -XX:+UseG1GC      : G1 collector — shorter, predictable GC pauses vs default
+#   -XX:MaxGCPauseMillis=50 : target GC pause budget under 50ms (avoids audio dropout)
+#   -XX:+DisableExplicitGC  : ignore System.gc() calls from libraries
+#   -XX:+OptimizeStringConcat: micro-opt for string-heavy logging paths
+#   -XX:+UseStringDeduplication: reduce heap pressure from repeated String objects
+java -server \
+    -Xmx"$LAVALINK_MEMORY" \
+    -Xms256m \
+    -XX:+UseG1GC \
+    -XX:MaxGCPauseMillis=50 \
+    -XX:+DisableExplicitGC \
+    -XX:+OptimizeStringConcat \
+    -XX:+UseStringDeduplication \
+    -jar Lavalink.jar \
     --server.address="$LAVALINK_HOST" \
     --server.port="$LAVALINK_PORT" &
 LAVALINK_PID=$!

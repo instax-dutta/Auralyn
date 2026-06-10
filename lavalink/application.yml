@@ -24,8 +24,8 @@ lavalink:
     # listener; the bot can only control what it sends out, not per-listener network.
     # So: encode at max quality, buffer generously to absorb source-side YouTube
     # jitter, and minimise GC pauses that would cause audible dropouts.
-    bufferDurationMs: 500              # source-side jitter buffer (default 400)
-    frameBufferDurationMs: 10000       # player-side Opus frame buffer (default 5000)
+    bufferDurationMs: 600              # source-side jitter buffer (raised from 500 for smoother YT streams)
+    frameBufferDurationMs: 15000       # player-side Opus frame buffer (raised from 10000 for smoother Discord delivery)
     opusEncodingQuality: 10            # 0-10, max quality
     resamplingQuality: HIGH            # LOW / MEDIUM / HIGH — best fidelity
     useSeekGhosting: true              # smoother user-initiated seeks
