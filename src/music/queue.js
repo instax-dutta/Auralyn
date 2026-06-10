@@ -21,7 +21,7 @@ export class QueueManager {
         history: [],
         isPlaying: false,
         isPaused: false,
-        volume: 70,
+        volume: 80,
         loopMode: LOOP_OFF,
         filterPreset: DEFAULT_FILTER,
         autoplay: false,
@@ -32,7 +32,7 @@ export class QueueManager {
         stayInVC: false,
         sleepTimer: null,
         preserveQueueOnLeave: false,
-        filterLayers: { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null },
+        filterLayers: { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null },
       });
     }
     return this.players.get(guildId);

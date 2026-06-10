@@ -145,18 +145,18 @@ export class MusicPlayer {
 
     this.queueManager.enqueue(guildId, nextTrack);
 
-    // Fire settings check + persist async — don't block playback on disk I/O.
+    if (!state.isPlaying) {
+      this.logger.debug(`Guild ${guildId} is idle, starting playback`);
+      await this.playNext(guildId, { skipNotification: true });
+    }
+
+    // Apply default volume + persist after playNext so the Lavalink player exists.
     this.getGuildSettings(guildId).then(settings => {
       if (state.volume !== settings.defaultVolume) {
         this.setVolume(guildId, settings.defaultVolume).catch(() => {});
       }
       void this.persistGuildState(guildId);
     }).catch(() => {});
-
-    if (!state.isPlaying) {
-      this.logger.debug(`Guild ${guildId} is idle, starting playback`);
-      await this.playNext(guildId, { skipNotification: true });
-    }
 
     return state;
   }
@@ -172,16 +172,16 @@ export class MusicPlayer {
 
     this.queueManager.enqueueBulk(guildId, tracks);
 
+    if (!state.isPlaying) {
+      await this.playNext(guildId, { skipNotification: true });
+    }
+
     this.getGuildSettings(guildId).then(settings => {
       if (state.volume !== settings.defaultVolume) {
         this.setVolume(guildId, settings.defaultVolume).catch(() => {});
       }
       void this.persistGuildState(guildId);
     }).catch(() => {});
-
-    if (!state.isPlaying) {
-      await this.playNext(guildId, { skipNotification: true });
-    }
 
     return state;
   }
@@ -488,7 +488,7 @@ export class MusicPlayer {
 
   buildCombinedFilter(guildId) {
     const state = this.queueManager.getState(guildId);
-    const layers = state.filterLayers ?? { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+    const layers = state.filterLayers ?? { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
 
     const combined = {
       equalizer: [],
@@ -503,7 +503,7 @@ export class MusicPlayer {
     };
 
     // EQ layer
-    const eqPreset = layers.eq && layers.eq !== 'flat' ? FILTER_PRESETS[layers.eq] : null;
+    const eqPreset = layers.eq ? FILTER_PRESETS[layers.eq] : null;
     if (eqPreset) {
       combined.equalizer = eqPreset.equalizer ?? [];
       if (eqPreset.lowPass) combined.lowPass = eqPreset.lowPass;
@@ -516,7 +516,8 @@ export class MusicPlayer {
       combined.distortion = tp.distortion ?? null;
       if (tp.lowPass) combined.lowPass = tp.lowPass;
       // vaporwave has subtle EQ — apply only when no explicit EQ preset is active
-      if (tp.equalizer?.length > 0 && (!layers.eq || layers.eq === 'flat')) {
+      // vaporwave has subtle EQ — apply only when no explicit non-default EQ is active
+      if (tp.equalizer?.length > 0 && (!layers.eq || layers.eq === DEFAULT_FILTER)) {
         combined.equalizer = tp.equalizer;
       }
     }
@@ -539,14 +540,14 @@ export class MusicPlayer {
 
     const state = this.queueManager.getState(guildId);
     if (!state.filterLayers) {
-      state.filterLayers = { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+      state.filterLayers = { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
     }
 
     if (preset === 'flat') {
-      state.filterLayers = { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+      state.filterLayers = { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
     } else if (SOLO_PRESETS.has(preset)) {
       // Solo preset — wipe all layers then apply clean
-      state.filterLayers = { eq: 'flat', timescale: null, rotation: null, karaoke: null, vibrato: null };
+      state.filterLayers = { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
       const layer = PRESET_LAYER[preset];
       if (layer) state.filterLayers[layer] = preset;
     } else {
@@ -560,7 +561,7 @@ export class MusicPlayer {
       if (layer) {
         // Toggle: applying the same preset again clears that layer
         if (state.filterLayers[layer] === preset) {
-          state.filterLayers[layer] = layer === 'eq' ? 'flat' : null;
+          state.filterLayers[layer] = layer === 'eq' ? DEFAULT_FILTER : null;
         } else {
           state.filterLayers[layer] = preset;
         }

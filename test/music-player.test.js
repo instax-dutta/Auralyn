@@ -33,6 +33,8 @@ class FakeLavalinkPlayer extends EventEmitter {
   async setGlobalVolume(volume) {
     this.volume = volume;
   }
+
+  async setFilters() {}
 }
 
 class FakeShoukaku {
@@ -157,6 +159,10 @@ test('enqueue applies default guild volume and preserves requester metadata', as
     textChannel: { id: 'text-1', send: async () => {} },
     voiceChannel: { id: 'voice', guild: { shardId: 0 } },
   });
+
+  // Volume is applied async (non-blocking) after enqueue returns.
+  // Drain the microtask + I/O queue enough for the .then() chain to complete.
+  await new Promise(resolve => setTimeout(resolve, 100));
 
   const state = musicPlayer.getPlayerState('guild');
   assert.equal(state.currentTrack.requestedByUserId, 'user-1');
