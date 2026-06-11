@@ -15,6 +15,18 @@ export const defaultGuildSettings = Object.freeze({
   twentyFourSeven: false,
   voteSkipEnabled: false,
   voteSkipThreshold: 50,
+  announceTracks: false,
+  announceChannelId: null,
+  vcStatusEnabled: false,
+  commandRestrictions: {},
+  musicPanelChannelId: null,
+  musicPanelMessageId: null,
+  activeFilterName: null,
+  defaultPlaylist: null,
+  radioMode: false,
+  radioConfig: null,
+  lastfmScrobble: false,
+  djModeEnabled: false,
 });
 
 function sanitizeNumber(value, fallback, { min, max }) {
@@ -38,6 +50,28 @@ function sanitizeGuildSettings(input = {}) {
     twentyFourSeven: input.twentyFourSeven === true,
     voteSkipEnabled: input.voteSkipEnabled === true,
     voteSkipThreshold: sanitizeNumber(input.voteSkipThreshold, defaultGuildSettings.voteSkipThreshold, { min: 1, max: 100 }),
+    announceTracks: input.announceTracks === true,
+    announceChannelId: typeof input.announceChannelId === 'string' ? input.announceChannelId : null,
+    vcStatusEnabled: input.vcStatusEnabled === true,
+    commandRestrictions: (input.commandRestrictions && typeof input.commandRestrictions === 'object' && !Array.isArray(input.commandRestrictions))
+      ? Object.fromEntries(
+          Object.entries(input.commandRestrictions).map(([cmd, rule]) => [
+            cmd,
+            {
+              ...(typeof rule?.channelId === 'string' ? { channelId: rule.channelId } : {}),
+              ...(typeof rule?.djOnly === 'boolean' ? { djOnly: rule.djOnly } : {}),
+            },
+          ]),
+        )
+      : {},
+    musicPanelChannelId: typeof input.musicPanelChannelId === 'string' ? input.musicPanelChannelId : null,
+    musicPanelMessageId: typeof input.musicPanelMessageId === 'string' ? input.musicPanelMessageId : null,
+    activeFilterName: typeof input.activeFilterName === 'string' ? input.activeFilterName : null,
+    defaultPlaylist: typeof input.defaultPlaylist === 'string' ? input.defaultPlaylist : null,
+    radioMode: input.radioMode === true,
+    radioConfig: (input.radioConfig && typeof input.radioConfig === 'object') ? input.radioConfig : null,
+    lastfmScrobble: input.lastfmScrobble === true,
+    djModeEnabled: input.djModeEnabled === true,
   };
 }
 

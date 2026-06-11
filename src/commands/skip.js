@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { buildActionFeedback, replyWithPlayerSnapshot } from '../utils/music-ui.js';
+import { getCommandRestriction, requireDjOrAdmin } from '../utils/permissions.js';
 
 const VOTESKIP_THRESHOLD = 3;
 
@@ -20,6 +21,16 @@ export default {
 
   async execute(interaction, client) {
     await interaction.deferReply();
+
+    const restriction = await getCommandRestriction(client.musicPlayer.settingsStore, interaction.guildId, 'skip');
+    if (restriction?.djOnly) {
+      const settings = await client.musicPlayer.settingsStore.get(interaction.guildId);
+      const djCheck = requireDjOrAdmin(interaction, settings);
+      if (!djCheck.allowed) return interaction.editReply(djCheck.reply);
+    }
+    if (restriction?.channelId && interaction.channelId !== restriction.channelId) {
+      return interaction.editReply(buildActionFeedback('Wrong Channel', `This command is restricted to <#${restriction.channelId}>.`, false));
+    }
 
     const voiceChannel = interaction.member?.voice?.channel;
     if (!voiceChannel) {

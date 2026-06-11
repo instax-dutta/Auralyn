@@ -2,7 +2,7 @@ import { LoadType } from 'shoukaku';
 import { createSilentLogger } from '../utils/logger.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { QueueManager, LOOP_TRACK } from './queue.js';
-import { FILTER_PRESETS, DEFAULT_FILTER, PRESET_LAYER, SOLO_PRESETS, checkStackConflict } from '../utils/audio-filters.js';
+import { FILTER_PRESETS, DEFAULT_FILTER, PRESET_LAYER } from '../utils/audio-filters.js';
 import { buildNowPlayingPayload, buildSimpleV2 } from '../utils/music-ui.js';
 import { AuralynColors } from '../utils/embeds.js';
 
@@ -302,6 +302,35 @@ export class MusicPlayer {
     }
 
     void this.persistGuildState(guildId);
+
+    this.getGuildSettings(guildId).then((settings) => {
+      if (settings.announceTracks && settings.announceChannelId && settings.announceChannelId !== state.textChannel?.id) {
+        const channel = state.textChannel?.guild?.channels?.cache?.get(settings.announceChannelId);
+        if (channel?.send) {
+          channel.send(buildNowPlayingPayload({
+            track: nextTrack,
+            position: 0,
+            volume: state.volume,
+            loopMode: state.loopMode,
+            queueLength: state.queue.length,
+            autoplay: state.autoplay,
+            guildId,
+            isPaused: false,
+            headerText: 'Auralyn | Now Playing',
+          })).catch(() => {});
+        }
+      }
+
+      if (settings.vcStatusEnabled) {
+        const voiceChannelId = state.voiceChannel?.id;
+        const restClient = state.voiceChannel?.client?.rest;
+        if (voiceChannelId && restClient) {
+          const title = nextTrack?.info?.title ?? 'Music';
+          restClient.put(`/channels/${voiceChannelId}/voice-status`, { body: { status: title } }).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+
     return nextTrack;
   }
 
@@ -411,11 +440,26 @@ export class MusicPlayer {
       }
     }
 
+    await this.clearVoiceStatus(guildId, state);
     await this.disconnect(guildId);
+  }
+
+  async clearVoiceStatus(guildId, state) {
+    try {
+      const settings = await this.getGuildSettings(guildId);
+      if (!settings.vcStatusEnabled) return;
+      const voiceChannelId = state?.voiceChannel?.id;
+      const restClient = state?.voiceChannel?.client?.rest;
+      if (voiceChannelId && restClient) {
+        await restClient.put(`/channels/${voiceChannelId}/voice-status`, { body: { status: '' } });
+      }
+    } catch { /* ignore — 403 on free tier or no permission */ }
   }
 
   async disconnect(guildId) {
     this.stopNowPlayingRefresh(guildId);
+    const state = this.queueManager.getState(guildId);
+    await this.clearVoiceStatus(guildId, state);
     this.cleanupGuild(guildId);
     await this.shoukaku.leaveVoiceChannel(guildId);
     this.queueManager.cleanup(guildId);
@@ -539,33 +583,17 @@ export class MusicPlayer {
     if (!FILTER_PRESETS[preset]) throw new Error(`Unknown filter preset: ${preset}`);
 
     const state = this.queueManager.getState(guildId);
-    if (!state.filterLayers) {
-      state.filterLayers = { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
-    }
+    const empty = { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
 
+    // Stacking disabled: always reset to a clean slate, then apply only the
+    // requested preset on its own layer. Prevents filter combos that degrade
+    // the tuned audio quality.
     if (preset === 'flat') {
-      state.filterLayers = { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
-    } else if (SOLO_PRESETS.has(preset)) {
-      // Solo preset — wipe all layers then apply clean
-      state.filterLayers = { eq: DEFAULT_FILTER, timescale: null, rotation: null, karaoke: null, vibrato: null };
+      state.filterLayers = { ...empty };
+    } else {
+      state.filterLayers = { ...empty };
       const layer = PRESET_LAYER[preset];
       if (layer) state.filterLayers[layer] = preset;
-    } else {
-      // Check cross-layer conflicts before applying
-      const conflict = checkStackConflict(preset, state.filterLayers);
-      if (conflict.blocked) {
-        return { ok: false, reason: conflict.reason, conflictsWith: conflict.conflictsWith };
-      }
-
-      const layer = PRESET_LAYER[preset];
-      if (layer) {
-        // Toggle: applying the same preset again clears that layer
-        if (state.filterLayers[layer] === preset) {
-          state.filterLayers[layer] = layer === 'eq' ? DEFAULT_FILTER : null;
-        } else {
-          state.filterLayers[layer] = preset;
-        }
-      }
     }
 
     this.queueManager.setFilterPreset(guildId, preset);

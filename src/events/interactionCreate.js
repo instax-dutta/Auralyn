@@ -1,5 +1,6 @@
 import { Events, MessageFlags, Routes } from 'discord.js';
 import { buildActionFeedback, buildNowPlayingV2, buildSimpleV2 } from '../utils/music-ui.js';
+import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { AuralynColors } from '../utils/embeds.js';
 import { LOOP_OFF, LOOP_TRACK, LOOP_QUEUE } from '../music/queue.js';
 
@@ -34,6 +35,49 @@ export default {
           ...buildActionFeedback('Controls', 'These controls belong to a different server session.', false),
           flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
+        return;
+      }
+
+      if (action === 'settings-reset' || action === 'settings-cancel') {
+        await interaction.deferUpdate();
+        try {
+          if (action === 'settings-reset') {
+            await client.musicPlayer.settingsStore.update(guildId, defaultGuildSettings);
+            await interaction.editReply(buildActionFeedback('Settings Reset', 'All settings have been restored to defaults.'));
+          } else {
+            await interaction.editReply(buildActionFeedback('Settings', 'Reset cancelled.'));
+          }
+        } catch (error) {
+          client.logger.error(`Error handling ${interaction.customId}`, error);
+        }
+        return;
+      }
+
+      const PANEL_ACTIONS = new Set(['panel_prev', 'panel_pause', 'panel_skip', 'panel_loop', 'panel_stop']);
+      if (PANEL_ACTIONS.has(action)) {
+        await interaction.deferUpdate();
+        try {
+          if (action === 'panel_prev') {
+            await client.musicPlayer.previous(guildId);
+          } else if (action === 'panel_pause') {
+            const state = client.musicPlayer.getPlayerState(guildId);
+            if (state.isPaused) {
+              await client.musicPlayer.resume(guildId);
+            } else {
+              await client.musicPlayer.pause(guildId);
+            }
+          } else if (action === 'panel_skip') {
+            await client.musicPlayer.skip(guildId);
+          } else if (action === 'panel_loop') {
+            const current = client.musicPlayer.getPlayerState(guildId).loopMode;
+            const next = LOOP_CYCLE[current] ?? LOOP_OFF;
+            client.musicPlayer.setLoopMode(guildId, next);
+          } else if (action === 'panel_stop') {
+            await client.musicPlayer.stop(guildId);
+          }
+        } catch (error) {
+          client.logger.error(`Error handling panel button ${interaction.customId}`, error);
+        }
         return;
       }
 

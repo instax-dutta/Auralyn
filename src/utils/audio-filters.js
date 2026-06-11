@@ -329,57 +329,6 @@ export const FILTER_PRESETS = {
 // Users can override to flat for true bypass.
 export const DEFAULT_FILTER = 'balanced';
 
-// Pairs of presets that cannot coexist. Bidirectional.
-export const STACK_CONFLICTS = new Set([
-  '8d:vibration',         'vibration:8d',
-  'karaoke:vibration',    'vibration:karaoke',
-  'vibration:nightcore',  'nightcore:vibration',
-  'vibration:daycore',    'daycore:vibration',
-  'vibration:slowed',     'slowed:vibration',
-  'vibration:slowmo',     'slowmo:vibration',
-  'vibration:speedup',    'speedup:vibration',
-  'vibration:chipmunk',   'chipmunk:vibration',
-  'vibration:darthvader', 'darthvader:vibration',
-  'vibration:lofi',       'lofi:vibration',
-  'vibration:vaporwave',  'vaporwave:vibration',
-  'vibration:speed',      'speed:vibration',
-  'terriblebass:8d',         '8d:terriblebass',
-  'terriblebass:karaoke',    'karaoke:terriblebass',
-  'terriblebass:vibration',  'vibration:terriblebass',
-]);
-
-export const STACK_CONFLICT_REASONS = {
-  '8d:vibration':          '8D rotation + Vibration both affect stereo spatialization — this combo causes audio nausea.',
-  'karaoke:vibration':     'Vibration wobble over a karaoke-suppressed center channel produces unpredictable artifacts.',
-  'terriblebass:8d':       'Terrible Bass is an extreme preset — stacking other effects on top will clip and distort.',
-  'terriblebass:karaoke':  'Terrible Bass is an extreme preset — stacking other effects on top will clip and distort.',
-  'terriblebass:vibration':'Terrible Bass is an extreme preset — stacking other effects on top will clip and distort.',
-};
-
-function getConflictReason(a, b) {
-  const key = [a, b].sort().join(':');
-  return STACK_CONFLICT_REASONS[key] ?? 'These two filters conflict and would degrade audio quality.';
-}
-
-// Solo presets — wipe all other layers before applying.
-export const SOLO_PRESETS = new Set([
-  'terriblebass',
-  'lofi',
-  'vaporwave',
-  'darthvader',
-  'chipmunk',
-]);
-
-export function checkStackConflict(incomingPreset, activeLayers) {
-  for (const activePreset of Object.values(activeLayers)) {
-    if (!activePreset || activePreset === 'flat') continue;
-    if (STACK_CONFLICTS.has(`${incomingPreset}:${activePreset}`)) {
-      return { blocked: true, reason: getConflictReason(incomingPreset, activePreset), conflictsWith: activePreset };
-    }
-  }
-  return { blocked: false };
-}
-
 export const PRESET_LAYER = {
   flat:         'eq',
   balanced:     'eq',

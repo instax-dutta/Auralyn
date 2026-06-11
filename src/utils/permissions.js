@@ -75,6 +75,11 @@ export function requireSameVoiceChannel(interaction) {
   };
 }
 
+export async function getCommandRestriction(settingsStore, guildId, commandName) {
+  const settings = await settingsStore.get(guildId);
+  return settings.commandRestrictions?.[commandName] ?? null;
+}
+
 export function requireDjOrAdmin(interaction, settings) {
   if (isAdminLikeMember(interaction.member)) return { allowed: true };
   if (!settings || !settings.controlMode || settings.controlMode === 'everyone') return { allowed: true };
