@@ -12,6 +12,7 @@ import { RateLimiter } from './utils/rate-limiter.js';
 import { Telemetry } from './utils/telemetry.js';
 import { checkSpotifyCredentials } from './utils/spotify-check.js';
 import { getSpotifyYtCache } from './utils/spotify-yt-cache.js';
+import { GuildSettingsStore } from './utils/guild-settings.js';
 
 dotenv.config();
 
@@ -89,7 +90,8 @@ const shoukaku = new Shoukaku(
 );
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
-client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry });
+client.settingsStore = new GuildSettingsStore();
+client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry, settingsStore: client.settingsStore });
 
 client.shardStats = function() {
   return {
