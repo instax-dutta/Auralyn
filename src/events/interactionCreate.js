@@ -20,6 +20,12 @@ function patchV2(client, channelId, messageId, payload, guildId) {
       flags: payload.flags,
       components: payload.components.map(c => c.toJSON()),
     },
+  }).catch(error => {
+    if (error.code === 50001 || error.code === 10008 || error.status === 404) {
+      client.logger.debug(`Cannot update message ${messageId} in channel ${channelId}: ${error.message}`);
+      return;
+    }
+    throw error;
   });
 }
 

@@ -89,6 +89,9 @@ export default {
       );
     } catch (error) {
       client.logger.error('Error in play command', error);
+      if (error.message?.includes('voice connection') || error.message?.includes('not established')) {
+        return interaction.editReply(buildActionFeedback('Connection Failed', 'Could not connect to the voice channel. Check that it exists and the bot has permission to join.', false));
+      }
       return interaction.editReply(buildActionFeedback('Playback Failed', 'There was an error while trying to play that song.', false));
     }
   },

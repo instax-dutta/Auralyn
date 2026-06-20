@@ -7,7 +7,7 @@
   "exported_at": "2026-05-17T00:00:00+00:00",
   "name": "Auralyn Discord Music Bot",
   "author": "admin@example.com",
-  "description": "Runs the Auralyn Discord music bot and its bundled Lavalink server in one Docker container.",
+  "description": "Hyperscale-ready Auralyn Discord music bot with automatic sharding support. Runs the bot and bundled Lavalink server in one Docker container. Supports up to 2500+ guilds per shard with health monitoring, graceful shutdown, and per-shard memory tracking.",
   "features": null,
   "docker_images": {
     "Auralyn bundled": "ghcr.io/instax-dutta/auralyn:latest"
@@ -106,6 +106,86 @@
       "user_viewable": false,
       "user_editable": true,
       "rules": "nullable|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Total Shards",
+      "description": "Number of shards for hyperscale. Set to 'auto' for automatic detection, or specify an integer (e.g., 4, 8, 16).",
+      "env_variable": "TOTAL_SHARDS",
+      "default_value": "auto",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string",
+      "field_type": "text"
+    },
+    {
+      "name": "Shard Spawn Delay (ms)",
+      "description": "Delay between shard spawns in milliseconds. Default 5500ms respects Discord identify rate limit.",
+      "env_variable": "SHARD_SPAWN_DELAY_MS",
+      "default_value": "5500",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:1000|max:10000",
+      "field_type": "text"
+    },
+    {
+      "name": "Shard Spawn Timeout (ms)",
+      "description": "Timeout for each shard startup in milliseconds.",
+      "env_variable": "SHARD_SPAWN_TIMEOUT_MS",
+      "default_value": "30000",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:10000|max:120000",
+      "field_type": "text"
+    },
+    {
+      "name": "Shard Health Check Interval (ms)",
+      "description": "How often to check shard health and memory usage.",
+      "env_variable": "SHARD_HEALTH_CHECK_INTERVAL",
+      "default_value": "60000",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:10000|max:600000",
+      "field_type": "text"
+    },
+    {
+      "name": "Shard Max Memory (MB)",
+      "description": "Memory threshold per shard before logging warning.",
+      "env_variable": "SHARD_MAX_MEMORY_MB",
+      "default_value": "512",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:256|max:2048",
+      "field_type": "text"
+    },
+    {
+      "name": "Graceful Shutdown Timeout (ms)",
+      "description": "Time to wait for graceful shutdown before force-killing shards.",
+      "env_variable": "GRACEFUL_SHUTDOWN_TIMEOUT",
+      "default_value": "30000",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:10000|max:120000",
+      "field_type": "text"
+    },
+    {
+      "name": "Shard Status Interval (ms)",
+      "description": "Optional: Print shard status every N milliseconds. Leave empty to disable.",
+      "env_variable": "SHARD_STATUS_INTERVAL",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|integer|min:60000",
+      "field_type": "text"
+    },
+    {
+      "name": "Log Level",
+      "description": "Logging verbosity: debug, info, warn, or error.",
+      "env_variable": "LOG_LEVEL",
+      "default_value": "info",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:debug,info,warn,error",
       "field_type": "text"
     }
   ]

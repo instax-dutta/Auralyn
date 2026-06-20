@@ -84,11 +84,31 @@ const shoukaku = new Shoukaku(
     reconnectInterval: 5,
     restTimeout: 30,
     moveOnDisconnect: false,
+    connectionTimeout: 30000,
   },
 );
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
 client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry });
+
+client.shardStats = function() {
+  return {
+    shardId: this.shard?.ids?.[0] ?? null,
+    totalShards: this.shard?.count ?? 1,
+    uptime: this.uptime,
+    memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+    guildCount: this.guilds.cache.size,
+    playerCount: this.musicPlayer?.players?.size ?? 0,
+    commandsLoaded: this.commands?.size ?? 0,
+    ping: this.ws.ping,
+  };
+};
+
+client.on('messageCreate', (message) => {
+  if (message.content === '!graceful_shutdown') {
+    process.emit('SIGTERM');
+  }
+});
 
 const loadCommands = async () => {
   const commandsPath = path.join(__dirname, 'commands');
@@ -137,16 +157,32 @@ const setupShoukakuEvents = () => {
 };
 
 const shutdown = async (signal) => {
-  logger.warn(`Received ${signal}. Shutting down Auralyn...`);
-  for (const guildId of [...client.musicPlayer.players.keys()]) {
-    await client.musicPlayer.disconnect(guildId).catch(error => {
-      logger.error(`Failed to disconnect guild ${guildId}`, error);
+  logger.warn(`Received ${signal}. Shutting down Auralyn (shard ${SHARD_TAG})...`);
+
+  try {
+    const playerCount = client.musicPlayer.players.size;
+    if (playerCount > 0) {
+      logger.info(`Disconnecting ${playerCount} music players...`);
+      const disconnectPromises = [...client.musicPlayer.players.keys()].map(guildId =>
+        client.musicPlayer.disconnect(guildId).catch(error => {
+          logger.error(`Failed to disconnect guild ${guildId}`, error);
+        })
+      );
+      await Promise.all(disconnectPromises);
+      logger.info('All music players disconnected');
+    }
+
+    logger.info('Flushing caches...');
+    await getSpotifyYtCache().flush().catch(error => {
+      logger.warn(`Failed to flush Spotify→YT cache: ${error.message}`);
     });
+
+    logger.info('Destroying Discord client...');
+    await client.destroy();
+    logger.info('Shutdown complete');
+  } catch (error) {
+    logger.error('Error during shutdown', error);
   }
-  await getSpotifyYtCache().flush().catch(error => {
-    logger.warn(`Failed to flush Spotify→YT cache: ${error.message}`);
-  });
-  client.destroy();
   process.exit(0);
 };
 

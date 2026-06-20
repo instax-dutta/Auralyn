@@ -77,6 +77,7 @@ export function requireSameVoiceChannel(interaction) {
 
 export async function getCommandRestriction(settingsStore, guildId, commandName) {
   const settings = await settingsStore.get(guildId);
+  if (!settings) return null;
   return settings.commandRestrictions?.[commandName] ?? null;
 }
 
