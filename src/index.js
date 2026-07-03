@@ -13,6 +13,7 @@ import { Telemetry } from './utils/telemetry.js';
 import { checkSpotifyCredentials } from './utils/spotify-check.js';
 import { getSpotifyYtCache } from './utils/spotify-yt-cache.js';
 import { GuildSettingsStore } from './utils/guild-settings.js';
+import { JsonSessionStore } from './utils/session-store.js';
 
 dotenv.config();
 
@@ -91,7 +92,8 @@ const shoukaku = new Shoukaku(
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
 client.settingsStore = new GuildSettingsStore();
-client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry, settingsStore: client.settingsStore });
+client.sessionStore = new JsonSessionStore({ filePath: '/app/data/sessions.json' });
+client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry, settingsStore: client.settingsStore, sessionStore: client.sessionStore });
 
 client.shardStats = function() {
   return {
