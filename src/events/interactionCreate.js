@@ -87,6 +87,86 @@ export default {
         return;
       }
 
+      // Playlist pagination: auralyn:pl:page:<userId>:<playlistName>:<page>
+      if (action === 'pl' && interaction.customId.split(':')[2] === 'page') {
+        const parts = interaction.customId.split(':');
+        const userId = parts[3];
+        const playlistName = parts[4];
+        const page = parseInt(parts[5], 10);
+
+        if (userId !== interaction.user.id) {
+          await interaction.reply({
+            ...buildActionFeedback('Not Allowed', 'You cannot control someone else\'s playlist view.', false),
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const playlistCmd = client.commands.get('playlist');
+        if (playlistCmd) {
+          interaction.options = {
+            getSubcommand: () => 'view',
+            getString: (key) => key === 'name' ? playlistName : null,
+            getInteger: (key) => key === 'page' ? page : null,
+          };
+          await playlistCmd.execute(interaction, client);
+        }
+        return;
+      }
+
+      // Liked songs pagination: auralyn:liked:page:<userId>:<page>
+      if (action === 'liked' && interaction.customId.split(':')[2] === 'page') {
+        const parts = interaction.customId.split(':');
+        const userId = parts[3];
+        const page = parseInt(parts[4], 10);
+
+        if (userId !== interaction.user.id) {
+          await interaction.reply({
+            ...buildActionFeedback('Not Allowed', 'You cannot control someone else\'s liked songs view.', false),
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const likedCmd = client.commands.get('liked');
+        if (likedCmd) {
+          interaction.options = {
+            getInteger: (key) => key === 'page' ? page : null,
+          };
+          await likedCmd.execute(interaction, client);
+        }
+        return;
+      }
+
+      // Clear liked: auralyn:liked:clear:confirm|cancel:<userId>
+      if (action === 'liked' && interaction.customId.split(':')[2] === 'clear') {
+        const parts = interaction.customId.split(':');
+        const confirmOrCancel = parts[3];
+        const userId = parts[4];
+
+        if (userId !== interaction.user.id) {
+          await interaction.reply({
+            ...buildActionFeedback('Not Allowed', 'You cannot control someone else\'s liked songs.', false),
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        await interaction.deferUpdate();
+        try {
+          if (confirmOrCancel === 'confirm') {
+            const count = await client.likedStore.clearLikedSongs(interaction.user.id);
+            await interaction.editReply(buildActionFeedback('Liked Songs Cleared', `Removed **${count}** track${count === 1 ? '' : 's'}.`));
+          } else {
+            await interaction.editReply(buildActionFeedback('Cancelled', 'Your liked songs were not cleared.'));
+          }
+        } catch (error) {
+          client.logger.error(`Error handling ${interaction.customId}`, error);
+          await interaction.editReply(buildActionFeedback('Failed', 'Something went wrong.', false));
+        }
+        return;
+      }
+
       await interaction.deferUpdate();
 
       const channelId = interaction.channelId;

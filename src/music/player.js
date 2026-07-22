@@ -239,6 +239,14 @@ export class MusicPlayer {
     const nextTrack = this.queueManager.getNextTrack(state);
 
     if (!nextTrack) {
+      // Try defaultPlaylist first (for 24/7 mode or when queue empties)
+      const settings = await this.getGuildSettings(guildId);
+      if (settings.defaultPlaylist) {
+        // Load from the guild owner or first admin who set it — for now, fail gracefully
+        // TODO: track playlist owner in settings or use a guild-level playlist store
+        this.logger.debug(`Default playlist set (${settings.defaultPlaylist}) but owner unknown — skipping.`);
+      }
+
       if (state.autoplay) {
         const autoTrack = await this.fetchAutoplayTrack(guildId);
         if (autoTrack) {
