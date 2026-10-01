@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from '../config.js';
 import { createLogger } from './logger.js';
+import { deployWithRetry } from './deploy-retry.js';
 
 dotenv.config();
 
@@ -55,12 +56,21 @@ export function getCommandDeploymentTargets(config) {
   return [{ scope: 'global', clientId: config.clientId }];
 }
 
-export async function deployCommands(config = loadConfig(), { force = false } = {}) {
+export async function deployCommands(config = loadConfig(), { force = false, timerRegistry } = {}) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
   const hash = hashCommands(commands);
 
-  const rest = new REST({ version: '10' }).setToken(config.discordToken);
+    const rest = new REST({
+    version: '10',
+    retries: 0,
+    rejectOnRateLimit: async () => true,
+    makeRequest: async (url, options) => fetch(url, {
+      ...options,
+      headers: { ...options.headers, 'X-RateLimit-Precision': 'millisecond' },
+    }),
+  }).setToken(config.discordToken);
+
   const targets = getCommandDeploymentTargets(config);
 
   for (const target of targets) {
@@ -74,9 +84,9 @@ export async function deployCommands(config = loadConfig(), { force = false } = 
     logger.info(`Refreshing ${commands.length} application commands for ${key}.`);
 
     if (target.scope === 'global') {
-      const data = await rest.put(
-        Routes.applicationCommands(target.clientId),
-        { body: commands },
+      const data = await deployWithRetry(
+        () => rest.put(Routes.applicationCommands(target.clientId), { body: commands }),
+        { timerRegistry },
       );
       logger.info(`Registered ${data.length} global commands. Propagation can take up to one hour.`);
       deployedHashes.set(key, hash);
@@ -84,9 +94,9 @@ export async function deployCommands(config = loadConfig(), { force = false } = 
     }
 
     try {
-      const data = await rest.put(
-        Routes.applicationGuildCommands(target.clientId, target.guildId),
-        { body: commands },
+      const data = await deployWithRetry(
+        () => rest.put(Routes.applicationGuildCommands(target.clientId, target.guildId), { body: commands }),
+        { timerRegistry },
       );
       logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
       deployedHashes.set(key, hash);
@@ -96,7 +106,7 @@ export async function deployCommands(config = loadConfig(), { force = false } = 
   }
 }
 
-export async function deployCommandsForGuild(config, guildId, force = false) {
+export async function deployCommandsForGuild(config, guildId, force = false, { timerRegistry } = {}) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
   const hash = hashCommands(commands);
@@ -107,10 +117,15 @@ export async function deployCommandsForGuild(config, guildId, force = false) {
     return;
   }
 
-  const rest = new REST({ version: '10' }).setToken(config.discordToken);
-  const data = await rest.put(
-    Routes.applicationGuildCommands(config.clientId, guildId),
-    { body: commands },
+    const rest = new REST({
+    version: '10',
+    retries: 0,
+    rejectOnRateLimit: async () => true,
+  }).setToken(config.discordToken);
+
+  const data = await deployWithRetry(
+    () => rest.put(Routes.applicationGuildCommands(config.clientId, guildId), { body: commands }),
+    { timerRegistry },
   );
   logger.info(`Registered ${data.length} guild commands for ${guildId}.`);
   deployedHashes.set(key, hash);
