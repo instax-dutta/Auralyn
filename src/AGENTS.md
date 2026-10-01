@@ -1,0 +1,41 @@
+# src — Bot Core
+
+## Purpose
+
+Auralyn's bot process: entrypoints, environment config, wiring of commands/events/music/utils, and the client-level singleton stores.
+
+## Ownership
+
+- `index.js` — process bootstrap: client construction (intents, sharding), Shoukaku node, stores, command/event loaders, guildCreate command sync, graceful shutdown, exports `main()`, `client`, `shoukaku`
+- `shard.js` — ShardingManager launcher (default container entrypoint via `scripts/start.sh`; override with `BOT_ENTRYPOINT`)
+- `config.js` — `loadConfig()`: the single env parser; validates `DISCORD_TOKEN`, `CLIENT_ID`, `LAVALINK_PASSWORD` and maps all documented env vars
+- `deploy-commands.js` — standalone command-deploy script (`npm run deploy`)
+
+## Local Contracts
+
+- ESM everywhere; relative imports must include the `.js` extension (no extension-less imports).
+- Never read `process.env` outside `config.js`; consume `client.config` (or `loadConfig()`) instead.
+- Command module contract (loaded from `commands/`): default export with `data` (SlashCommandBuilder) and `execute(interaction, client, shoukaku)`; loader throws if either is missing.
+- Event module contract (loaded from `events/`): default export with `name`, optional `once`, and `execute(...args, client, shoukaku)`; the loader owns listener registration.
+- Sharding: when launched via the manager, `SHARDS` and `SHARD_COUNT` envs are injected; the Client must be constructed with explicit `shards`/`shardCount` so it always agrees with the manager.
+- Graceful shutdown: SIGINT/SIGTERM (or `!graceful_shutdown` message) → disconnect all players per guild, flush Spotify→YT cache, destroy client, exit 0.
+- Guild command sync is rate-limited (`guildSyncLimiter`: 3s window, burst 3) to stay inside Discord API limits.
+- Singletons attached to client: `logger`, `config`, `telemetry`, `settingsStore`, `sessionStore`, `playlistStore`, `likedStore`, `musicPlayer`, `shardInfo`.
+
+## Work Guidance
+
+- Keep core wiring minimal; domain logic belongs in `music/` and `utils/`.
+- Logging only via `createLogger` from `utils/logger.js`; use `logger.child(scope)` for scoped output.
+- All persisted runtime state must go through `utils/data-dir.js` (`/app/data`); never hardcode paths.
+
+## Verification
+
+- `npm test` (`node --test`) must pass; `commands-load.test.js` exercises the command loader contract.
+- `loadConfig()` behavior is covered by tests and fails fast with clear errors on missing required env.
+
+## Child DOX Index
+
+- `commands/AGENTS.md` — slash command implementations
+- `events/AGENTS.md` — Discord gateway event handlers
+- `music/AGENTS.md` — playback engine (player, queue, resolver)
+- `utils/AGENTS.md` — shared utilities, stores, integrations
