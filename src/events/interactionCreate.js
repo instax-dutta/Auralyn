@@ -4,6 +4,7 @@ import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { AuralynColors } from '../utils/embeds.js';
 import { LOOP_OFF, LOOP_TRACK, LOOP_QUEUE } from '../music/queue.js';
 import { parseCustomId } from '../utils/interaction-ids.js';
+import { getCommandRestriction, requireDjOrAdmin } from '../utils/permissions.js';
 
 const LOOP_CYCLE = [LOOP_TRACK, LOOP_QUEUE, LOOP_OFF];
 
@@ -244,6 +245,36 @@ export default {
     if (!command) {
       client.logger.warn(`No command matching ${interaction.commandName}`);
       return;
+    }
+
+    // Restrictions are enforced once here so every command obeys /restrict,
+    // not just the handful that used to duplicate this check inline.
+    if (interaction.guildId) {
+      const restriction = await getCommandRestriction(
+        client.musicPlayer.settingsStore,
+        interaction.guildId,
+        interaction.commandName,
+      );
+
+      if (restriction?.channelId && interaction.channelId !== restriction.channelId) {
+        await interaction.reply({
+          ...buildActionFeedback('Wrong Channel', `\`/${interaction.commandName}\` is restricted to <#${restriction.channelId}>.`, false),
+          flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (restriction?.djOnly) {
+        const settings = await client.musicPlayer.settingsStore.get(interaction.guildId);
+        const djCheck = requireDjOrAdmin(interaction, settings);
+        if (!djCheck.allowed) {
+          await interaction.reply({
+            ...djCheck.reply,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+          });
+          return;
+        }
+      }
     }
 
     try {

@@ -2,24 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Collection } from 'discord.js';
 
-import skip from '../src/commands/skip.js';
-import previous from '../src/commands/previous.js';
-import loop from '../src/commands/loop.js';
-import pause from '../src/commands/pause.js';
-import volume from '../src/commands/volume.js';
+import interactionCreate from '../src/events/interactionCreate.js';
 import { createInteraction } from './helpers/discord-interaction.js';
 
-const MUTATORS = [
-  ['skip', skip],
-  ['previous', previous],
-  ['loop', loop],
-  ['pause', pause],
-  ['volume', volume],
-];
+const MUTATORS = ['skip', 'previous', 'loop', 'pause', 'volume', 'resume', 'playnext', 'bump', 'shuffle', '247'];
 
 function commandInteraction(commandName) {
   const interaction = createInteraction({ guildId: 'guild-1', channelId: 'text-1', userId: 'plain-user' });
   interaction.commandName = commandName;
+  interaction.isChatInputCommand = () => true;
+  interaction.isButton = () => false;
   interaction.member = {
     roles: { cache: new Map() },
     voice: { channel: { id: 'voice-1', members: new Collection() } },
@@ -43,6 +35,7 @@ function djOnlyClient(commandName) {
   return {
     calls,
     logger: { info() {}, warn() {}, error() {}, debug() {} },
+    commands: new Map(),
     config: { djRoleIds: ['dj-role'], djModeEnabled: true, controlMode: 'public' },
     rest: { async patch() { return {}; } },
     musicPlayer: {
@@ -83,12 +76,13 @@ function replyText(interaction) {
 }
 
 test('a dj_only restriction blocks a non-DJ on every playback-mutating command', async t => {
-  for (const [name, command] of MUTATORS) {
+  for (const name of MUTATORS) {
     await t.test(name, async () => {
       const client = djOnlyClient(name);
       const interaction = commandInteraction(name);
 
-      await command.execute(interaction, client, null);
+      client.commands.set(name, { data: { name }, async execute() { client.calls.push([name]); } });
+      await interactionCreate.execute(interaction, client, null);
 
       assert.equal(
         client.calls.length,
@@ -111,7 +105,8 @@ test('a dj_only restriction does not block a DJ-role member', async () => {
     roles: { cache: new Map([['dj-role', { id: 'dj-role' }]]) },
     voice: { channel: { id: 'voice-1', members: new Collection() } },
   };
-  await skip.execute(interaction, client, null);
+  client.commands.set('skip', { data: { name: 'skip' }, async execute() { client.calls.push(['skip']); } });
+  await interactionCreate.execute(interaction, client, null);
 
   assert.deepEqual(client.calls, [['skip']], 'a DJ-role member was blocked by a dj_only restriction');
 });
