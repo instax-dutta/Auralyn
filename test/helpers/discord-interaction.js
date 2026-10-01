@@ -32,6 +32,13 @@ export function createInteraction({
       interaction.deferred = true;
       return interaction;
     },
+    async editReply(payload) {
+      if (!state.deferred && !state.replied) {
+        throw new Error('InteractionNotDeferred');
+      }
+      state.replyPayload = payload;
+      return interaction;
+    },
     async update(payload) {
       if (!state.replied && !state.deferred) {
         throw new Error('InteractionNotReplied');
