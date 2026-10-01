@@ -41,25 +41,25 @@ Each line was checked against `768dba1` before this plan was written.
 New: `src/utils/atomic-json.js`, `src/utils/storage-paths.js`
 Tests: `test/storage-primitives.test.js`, `test/storage-contention.test.js`
 
-- [ ] `atomic replacement and read-back` — RED: driving the current
+- [x] `atomic replacement and read-back` — RED: driving the current
       `JsonSessionStore({ filePath }).save()` and killing the process mid-write
       leaves a truncated file, because `session-store.js:24` calls `writeFile`
       with no temporary file and no read-back. GREEN: `writeJsonAtomic()` writes a
       sibling temp file, fsyncs, renames, fsyncs the directory, and reads back.
-- [ ] `quarantine corrupt json` — RED: `JsonSessionStore.ensureLoaded()` at
+- [x] `quarantine corrupt json` — RED: `JsonSessionStore.ensureLoaded()` at
       `session-store.js:15` throws on malformed JSON, so one bad file prevents
       startup for every guild. GREEN: the corrupt file is moved aside and the
       store starts empty.
-- [ ] `lost update across store instances` — RED: two `JsonSessionStore` instances
+- [x] `lost update across store instances` — RED: two `JsonSessionStore` instances
       on one file each cache the file, then each writes the WHOLE cache back, so
       the second write silently erases the first guild's entry. Verified against
       `768dba1`: A saves `g1`, B saves `g2`, and the file ends with only `g2`
       while B's memory still reports `g1` present. GREEN: a write re-reads the
       canonical file and merges under a lock.
-- [ ] `per-path serialization` — RED: concurrent writes to one path have no
+- [x] `per-path serialization` — RED: concurrent writes to one path have no
       ordering, so readers observe a partially written file. GREEN: a per-path
       promise chain orders them and rejects overlapping writes for the same path.
-- [ ] `cross-process lock` — RED: two forked processes writing one file can
+- [x] `cross-process lock` — RED: two forked processes writing one file can
       interleave. GREEN: an owner-token lock file with stale-owner reclamation.
 
 ## Task 2 — Per-guild settings and session stores, with migration
