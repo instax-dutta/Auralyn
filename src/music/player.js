@@ -411,8 +411,27 @@ export class MusicPlayer {
     await this.shoukaku.leaveVoiceChannel(guildId);
   }
 
-  enqueueFront(guildId, track) {
-    this.queueManager.enqueueFront(guildId, track);
+  async enqueueFront({ guildId, track, textChannel, voiceChannel }) {
+    const state = this.queueManager.getState(guildId);
+    state.textChannel = textChannel;
+    state.voiceChannel = voiceChannel;
+
+    const nextTrack = {
+      ...track,
+      requestedByUserId: track.requestedByUserId ?? null,
+      requestedByName: track.requestedByName ?? null,
+    };
+
+    this.queueManager.enqueueFront(guildId, nextTrack);
+
+    if (!state.isPlaying) {
+      this.logger.debug(`Guild ${guildId} is idle, starting playback for the front-inserted track`);
+      await this.playNext(guildId, { skipNotification: true });
+    }
+
+    void this.persistGuildState(guildId);
+
+    return state;
   }
 
   clearSleepTimer(guildId) {
