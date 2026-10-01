@@ -434,6 +434,40 @@ export class MusicPlayer {
     return state;
   }
 
+  /**
+   * Tears playback down and rebuilds it from a snapshot while preserving
+   * order: the snapshot's queue stays in its original sequence and the
+   * snapshot's current track becomes the current track again. Unlike
+   * replaying enqueueFront, this never reverses the queue.
+   */
+  async restoreSession({ guildId, currentTrack = null, queue = [], textChannel = null, voiceChannel = null }) {
+    const state = this.queueManager.getState(guildId);
+    const restoreTextChannel = textChannel ?? state.textChannel;
+    const restoreVoiceChannel = voiceChannel ?? state.voiceChannel;
+
+    await this.stop(guildId);
+
+    const fresh = this.queueManager.getState(guildId);
+    fresh.textChannel = restoreTextChannel;
+    fresh.voiceChannel = restoreVoiceChannel;
+    fresh.queue = [...queue];
+
+    if (currentTrack) {
+      fresh.queue.unshift(currentTrack);
+    }
+
+    if (fresh.queue.length === 0) {
+      return { restored: 0, resumed: false };
+    }
+
+    await this.playNext(guildId, { skipNotification: true });
+
+    return {
+      restored: fresh.queue.length,
+      resumed: fresh.isPlaying,
+    };
+  }
+
   clearSleepTimer(guildId) {
     const state = this.queueManager.getState(guildId);
     if (state.sleepTimer) {
