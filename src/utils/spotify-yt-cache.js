@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
+import { dataPath } from './data-dir.js';
 
 // Persistent TTL cache for Spotify-track -> YouTube-search resolutions.
 // Survives restarts so a redeployed bot doesn't re-search YouTube for the
 // same songs. Same on-disk pattern as guild-settings.json.
 
-const DEFAULT_FILE_PATH = '/app/data/spotify-yt-cache.json';
+const DEFAULT_FILE_PATH = dataPath('spotify-yt-cache.json');
 const DEFAULT_TTL_MS = 24 * 60 * 60_000;   // 24 hours
 const DEFAULT_MAX_ENTRIES = 5000;
 const DEFAULT_PERSIST_DEBOUNCE_MS = 30_000;

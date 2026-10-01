@@ -32,10 +32,13 @@ test('every persisted path is built through data-dir.js rather than a hardcoded 
 
   await scan(path.join(ROOT, 'src'));
 
+  // data-dir.js is the single legitimate home for the default root.
+  const offendersOutsideDataDir = offenders.filter(file => !file.startsWith(`src${path.sep}utils${path.sep}data-dir.js:`));
+
   assert.deepEqual(
-    offenders.filter(file => file !== path.join('src', 'utils', 'data-dir.js')),
+    offendersOutsideDataDir,
     [],
-    `hardcoded /app/data outside data-dir.js: ${offenders.join(', ')}`,
+    `hardcoded /app/data outside data-dir.js: ${offendersOutsideDataDir.join(', ')}`,
   );
 });
 

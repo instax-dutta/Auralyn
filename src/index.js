@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Collection, Events } from 'discord.js';
 import { Connectors, Shoukaku } from 'shoukaku';
 import fs from 'fs';
 import path from 'path';
+import { dataPath } from './utils/data-dir.js';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from './config.js';
@@ -94,7 +95,7 @@ const shoukaku = new Shoukaku(
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
 client.settingsStore = new GuildSettingsStore();
-client.sessionStore = new JsonSessionStore({ filePath: '/app/data/sessions.json' });
+client.sessionStore = new JsonSessionStore({ filePath: dataPath('sessions.json') });
 client.playlistStore = new PlaylistStore();
 client.likedStore = new LikedStore();
 client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry, settingsStore: client.settingsStore, sessionStore: client.sessionStore });

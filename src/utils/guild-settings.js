@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { dataPath } from './data-dir.js';
 
 export const DEFAULT_SOURCE_PRIORITY = ['direct', 'youtube'];
 export const VALID_SOURCES = new Set(['direct', 'youtube', 'soundcloud']);
@@ -75,7 +76,7 @@ function sanitizeGuildSettings(input = {}) {
   };
 }
 
-const DEFAULT_FILE_PATH = '/app/data/guild-settings.json';
+const DEFAULT_FILE_PATH = dataPath('guild-settings.json');
 
 export class GuildSettingsStore {
   constructor({ filePath } = {}) {
