@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { writeJsonAtomic } from './atomic-json.js';
 
 export class JsonSessionStore {
   constructor({ filePath }) {
@@ -22,8 +22,7 @@ export class JsonSessionStore {
   }
 
   async persist() {
-    await mkdir(path.dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, JSON.stringify(this.cache, null, 2));
+    await writeJsonAtomic(this.filePath, this.cache);
   }
 
   async save(guildId, snapshot) {
