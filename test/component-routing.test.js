@@ -66,21 +66,19 @@ test('a playlist button is routed on its guild segment, not its third segment', 
   assert.equal(executed, true, 'playlist pagination button was rejected instead of routed');
 });
 
-test('auralyn:voteskip-yes reaches the voteskip command instead of the guild ownership check', async () => {
+test('auralyn:voteskip-yes is routed to the active vote, not rejected as cross-guild', async () => {
   const client = createClient();
   const seen = [];
-  client.commands.set('voteskip', {
-    data: { name: 'voteskip' },
-    async execute(interaction) {
-      seen.push(interaction.customId);
-    },
-  });
+  client.onVoteSkip = async (guildId, vote, voterId) => {
+    seen.push([guildId, vote, voterId]);
+  };
 
   const interaction = buttonInteraction('auralyn:voteskip-yes');
 
   await interactionCreate.execute(interaction, client, null);
 
-  assert.deepEqual(seen, ['auralyn:voteskip-yes'], 'voteskip button was not routed to the command');
+  assert.deepEqual(seen, [['guild-1', 'yes', 'user-1']], 'voteskip button was not routed');
+  assert.ok(!interaction.state.replyPayload, 'voteskip button was rejected as foreign');
 });
 
 test('a button from a different guild is rejected', async () => {
