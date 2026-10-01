@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { open, readFile, stat, unlink } from 'node:fs/promises';
+import { open, readFile, stat, unlink, utimes } from 'node:fs/promises';
 import path from 'node:path';
 
 const inProcessQueues = new Map();
@@ -85,9 +85,18 @@ export async function withFileLock(filePath, task, { staleMs = 30_000 } = {}) {
       }
     }
 
+    // Refresh the lock's mtime while the task runs so a holder that is alive
+    // but slow never looks stale to another process.
+    const heartbeat = setInterval(() => {
+      const now = new Date();
+      utimes(lockPath, now, now).catch(() => {});
+    }, Math.max(50, Math.floor(staleMs / 4)));
+    heartbeat.unref?.();
+
     try {
       return await task();
     } finally {
+      clearInterval(heartbeat);
       await unlink(lockPath).catch(() => {});
     }
   });
