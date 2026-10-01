@@ -1,4 +1,5 @@
 import { writeJsonAtomic, readJsonWithQuarantine } from './atomic-json.js';
+import { withFileLock } from './storage-lock.js';
 
 export class JsonSessionStore {
   constructor({ filePath }) {
@@ -24,9 +25,15 @@ export class JsonSessionStore {
   }
 
   async save(guildId, snapshot) {
-    const cache = await this.ensureLoaded();
-    cache[guildId] = snapshot;
-    await this.persist();
+    await withFileLock(this.filePath, async () => {
+      // Re-read inside the lock: another writer may have committed since this
+      // instance cached the file, and writing our stale copy would erase it.
+      const { value } = await readJsonWithQuarantine(this.filePath);
+      const cache = value && typeof value === 'object' ? value : {};
+      cache[guildId] = snapshot;
+      this.cache = cache;
+      await this.persist();
+    });
     return snapshot;
   }
 
@@ -36,12 +43,19 @@ export class JsonSessionStore {
   }
 
   async delete(guildId) {
-    const cache = await this.ensureLoaded();
-    delete cache[guildId];
-    await this.persist();
+    await withFileLock(this.filePath, async () => {
+      const { value } = await readJsonWithQuarantine(this.filePath);
+      const cache = value && typeof value === 'object' ? value : {};
+      delete cache[guildId];
+      this.cache = cache;
+      await this.persist();
+    });
   }
 
   async getAll() {
-    return { ...(await this.ensureLoaded()) };
+    const { value } = await readJsonWithQuarantine(this.filePath);
+    const cache = value && typeof value === 'object' ? value : {};
+    this.cache = cache;
+    return { ...cache };
   }
 }
