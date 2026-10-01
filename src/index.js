@@ -227,6 +227,20 @@ client.on('guildCreate', async (guild) => {
   }
 });
 
+// The ShardingManager asks a child to stop with a typed IPC message instead of
+// a signal, so a child that has finished booting can flush and exit cleanly.
+// This is registered only when the process really is a forked child; importing
+// this module in a normal process must not attach an IPC listener.
+if (typeof process.send === 'function') {
+  process.on('message', message => {
+    if (!message || message.op !== 'graceful_shutdown') return;
+    shutdown('graceful_shutdown').catch(error => {
+      logger.error('Error during graceful shutdown message', error);
+      process.exit(1);
+    });
+  });
+}
+
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMainModule) {
