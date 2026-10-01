@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { REST, Routes } from 'discord.js';
-import { deployCommands, deployCommandsForGuild } from '../src/utils/deploy-commands.js';
+import { deployCommands, deployCommandsForGuild, resetDeploymentState } from '../src/utils/deploy-commands.js';
 
 const config = {
   clientId: 'client-1',
@@ -12,6 +12,10 @@ const config = {
 function recordPuts() {
   const originalPut = REST.prototype.put;
   const requests = [];
+
+  // Deployment state is process-local and long-lived by design, so each test
+  // resets it to assert against a known-empty cache.
+  resetDeploymentState();
 
   REST.prototype.put = async function (route, options) {
     requests.push({ route, body: options?.body });

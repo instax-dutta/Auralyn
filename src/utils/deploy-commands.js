@@ -12,7 +12,19 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let lastCommandHash = null;
+const deployedHashes = new Map();
+
+// Test seam: deployment state is process-local and intentionally long-lived,
+// so tests reset it to stay isolated from one another.
+export function resetDeploymentState() {
+  deployedHashes.clear();
+}
+
+function targetKey(target) {
+  return target.scope === 'global'
+    ? `global:${target.clientId}`
+    : `guild:${target.clientId}:${target.guildId}`;
+}
 
 function hashCommands(commands) {
   return createHash('sha256').update(JSON.stringify(commands)).digest('hex');
@@ -43,39 +55,31 @@ export function getCommandDeploymentTargets(config) {
   return [{ scope: 'global', clientId: config.clientId }];
 }
 
-export async function deployCommands(config = loadConfig()) {
+export async function deployCommands(config = loadConfig(), { force = false } = {}) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
   const hash = hashCommands(commands);
 
-  if (lastCommandHash === hash) {
-    logger.info('Commands unchanged since last deploy — skipping.');
-    return;
-  }
-
-  const rest = new REST({ version: '10', makeRequest: (url, options) => {
-    const retries = options.retries ?? 0;
-    return fetch(url, { ...options, headers: { ...options.headers, 'X-RateLimit-Precision': 'millisecond' } }).then(res => {
-      if (res.status === 429 && retries < 3) {
-        return new Promise(resolve => {
-          setTimeout(() => resolve(rest.makeRequest(url, { ...options, retries: retries + 1 })), (res.headers.get('Retry-After') ?? 1) * 1000);
-        });
-      }
-      return res;
-    });
-  } }).setToken(config.discordToken);
-
+  const rest = new REST({ version: '10' }).setToken(config.discordToken);
   const targets = getCommandDeploymentTargets(config);
 
-  logger.info(`Refreshing ${commands.length} application commands.`);
-
   for (const target of targets) {
+    const key = targetKey(target);
+
+    if (!force && deployedHashes.get(key) === hash) {
+      logger.debug(`Commands unchanged for ${key} — skipping.`);
+      continue;
+    }
+
+    logger.info(`Refreshing ${commands.length} application commands for ${key}.`);
+
     if (target.scope === 'global') {
       const data = await rest.put(
         Routes.applicationCommands(target.clientId),
         { body: commands },
       );
       logger.info(`Registered ${data.length} global commands. Propagation can take up to one hour.`);
+      deployedHashes.set(key, hash);
       continue;
     }
 
@@ -85,20 +89,20 @@ export async function deployCommands(config = loadConfig()) {
         { body: commands },
       );
       logger.info(`Registered ${data.length} guild commands for ${target.guildId}.`);
+      deployedHashes.set(key, hash);
     } catch (err) {
       logger.warn(`Skipping guild ${target.guildId}: ${err.message}`);
     }
   }
-
-  lastCommandHash = hash;
 }
 
 export async function deployCommandsForGuild(config, guildId, force = false) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
   const hash = hashCommands(commands);
+  const key = `guild:${config.clientId}:${guildId}`;
 
-  if (!force && lastCommandHash === hash) {
+  if (!force && deployedHashes.get(key) === hash) {
     logger.debug(`Skipping guild ${guildId} deploy — commands unchanged.`);
     return;
   }
@@ -109,7 +113,7 @@ export async function deployCommandsForGuild(config, guildId, force = false) {
     { body: commands },
   );
   logger.info(`Registered ${data.length} guild commands for ${guildId}.`);
-  if (!lastCommandHash) lastCommandHash = hash;
+  deployedHashes.set(key, hash);
 }
 
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
