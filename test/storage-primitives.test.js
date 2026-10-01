@@ -4,7 +4,8 @@ import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { writeJsonAtomic } from '../src/utils/atomic-json.js';
+import { writeJsonAtomic, readJsonWithQuarantine } from '../src/utils/atomic-json.js';
+import { JsonSessionStore } from '../src/utils/session-store.js';
 
 async function tempDir() {
   return mkdtemp(path.join(os.tmpdir(), 'auralyn-atomic-'));
@@ -101,4 +102,67 @@ test('a pre-existing file is replaced rather than merged', async () => {
   await writeJsonAtomic(file, { recovered: true });
 
   assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { recovered: true });
+});
+test('an unparseable file is quarantined instead of thrown', async () => {
+  const dir = await tempDir();
+  const file = path.join(dir, 'state.json');
+
+  await writeFile(file, '{ this is not json');
+
+  const result = await readJsonWithQuarantine(file);
+
+  assert.equal(result.value, null);
+  assert.ok(result.quarantinedTo, 'no quarantine path was reported');
+
+  const quarantined = await readFile(result.quarantinedTo, 'utf8');
+  assert.equal(quarantined, '{ this is not json', 'the corrupt content was not preserved');
+});
+
+test('a missing file reports missing rather than quarantining', async () => {
+  const dir = await tempDir();
+  const file = path.join(dir, 'absent.json');
+
+  const result = await readJsonWithQuarantine(file);
+
+  assert.equal(result.value, null);
+  assert.equal(result.missing, true);
+  assert.equal(result.quarantinedTo, undefined);
+});
+
+test('a valid file is returned untouched', async () => {
+  const dir = await tempDir();
+  const file = path.join(dir, 'state.json');
+
+  await writeJsonAtomic(file, { generation: 7 });
+
+  const result = await readJsonWithQuarantine(file);
+
+  assert.deepEqual(result.value, { generation: 7 });
+  assert.equal(result.quarantinedTo, undefined);
+});
+
+test('a store starts empty when its file is corrupt', async () => {
+  const dir = await tempDir();
+  const file = path.join(dir, 'sessions.json');
+
+  await writeFile(file, '{ corrupt');
+
+  const store = new JsonSessionStore({ filePath: file });
+  const cache = await store.ensureLoaded();
+
+  assert.deepEqual(cache, {}, 'a corrupt session file blocked startup');
+});
+
+test('a store keeps the corrupt file for inspection', async () => {
+  const dir = await tempDir();
+  const file = path.join(dir, 'sessions.json');
+
+  await writeFile(file, '{ corrupt');
+
+  const store = new JsonSessionStore({ filePath: file });
+  await store.ensureLoaded();
+
+  const entries = await readdir(dir);
+  const quarantined = entries.filter(name => name.startsWith('sessions.json.corrupt-'));
+  assert.equal(quarantined.length, 1, `expected one quarantined file, saw ${entries.join(', ')}`);
 });

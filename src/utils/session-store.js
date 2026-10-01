@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import { writeJsonAtomic } from './atomic-json.js';
+import { writeJsonAtomic, readJsonWithQuarantine } from './atomic-json.js';
 
 export class JsonSessionStore {
   constructor({ filePath }) {
@@ -10,14 +9,13 @@ export class JsonSessionStore {
   async ensureLoaded() {
     if (this.cache) return this.cache;
 
-    try {
-      const raw = await readFile(this.filePath, 'utf8');
-      this.cache = JSON.parse(raw);
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      this.cache = {};
+    const { value, quarantinedTo } = await readJsonWithQuarantine(this.filePath);
+
+    if (quarantinedTo) {
+      this.onQuarantine?.(quarantinedTo);
     }
 
+    this.cache = value && typeof value === 'object' ? value : {};
     return this.cache;
   }
 
