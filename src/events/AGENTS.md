@@ -10,6 +10,12 @@ Handlers for Discord gateway events (`ready`, `interactionCreate`, `voiceStateUp
 
 ## Local Contracts
 
+- `interactionCreate.js` MUST parse component custom IDs with `parseCustomId()` from `utils/interaction-ids.js`. Never destructure or index-split a custom ID: playlist names may contain `:`, so fixed indices shift and silently corrupt fields.
+- Command restrictions from `/restrict` are enforced ONCE in the chat-input dispatcher, before `command.execute`. Individual commands may repeat the check but must not be the only enforcement point, or a new command silently opts out.
+- The four user-scoped families (`playlist-page`, `liked-page`, `liked-clear`, `voteskip`) carry a user id instead of a guild id and must be exempt from the guild-ownership gate.
+- Always reply (never `deferUpdate`) when rejecting a cross-guild or cross-user control; the caller has not been deferred.
+
+
 - Default export: `{ name, once?, async execute(...args, client, shoukaku) }`.
 - Event names use discord.js `Events` constants, not raw strings.
 - Registration is owned by the loader in `src/index.js` (`loadEvents`); handlers must NOT register listeners themselves.

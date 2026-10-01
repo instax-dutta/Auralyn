@@ -13,6 +13,12 @@ The Shoukaku/Lavalink wrapper that owns playback, per-guild queues, and track re
 
 ## Local Contracts
 
+- `MusicPlayer.enqueue()` and `MusicPlayer.enqueueFront()` take the SAME options object (`{ guildId, track, textChannel, voiceChannel }`). A positional signature on one and an object on the other silently keys player state on the argument object and enqueues nothing.
+- Both enqueue paths must start playback when the guild is idle, normalise absent `requestedByUserId`/`requestedByName` to `null`, and persist guild state.
+- `MusicPlayer.restoreSession({ guildId, currentTrack, queue, textChannel, voiceChannel })` is the only supported way to rebuild playback from a snapshot. It preserves queue order; replaying `enqueueFront` per item reverses the queue because `enqueueFront` unshifts.
+- `MusicPlayer.disconnect()` is recoverable (flushes a snapshot); `MusicPlayer.stop()` is destructive (clears the queue and current track); `leaveVoiceOnly()` removes transport only. Do not route a destructive operation through `disconnect()`.
+
+
 - External code (commands, events) interacts only through `client.musicPlayer` and the re-exports of `music/index.js`; no other module touches Shoukaku players directly.
 - Players are keyed by guildId; `disconnect(guildId)` is the shutdown path used by `src/index.js`.
 - Resolution honors per-guild `sourcePriority` from guild settings; fallback chain must never fail hard when Spotify resolution fails.

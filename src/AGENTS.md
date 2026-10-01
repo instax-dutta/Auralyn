@@ -18,7 +18,8 @@ Auralyn's bot process: entrypoints, environment config, wiring of commands/event
 - Command module contract (loaded from `commands/`): default export with `data` (SlashCommandBuilder) and `execute(interaction, client, shoukaku)`; loader throws if either is missing.
 - Event module contract (loaded from `events/`): default export with `name`, optional `once`, and `execute(...args, client, shoukaku)`; the loader owns listener registration.
 - Sharding: when launched via the manager, `SHARDS` and `SHARD_COUNT` envs are injected; the Client must be constructed with explicit `shards`/`shardCount` so it always agrees with the manager.
-- Graceful shutdown: SIGINT/SIGTERM (or `!graceful_shutdown` message) → disconnect all players per guild, flush Spotify→YT cache, destroy client, exit 0.
+- Graceful shutdown: SIGINT/SIGTERM or the manager's typed IPC message `{ op: 'graceful_shutdown' }` → disconnect all players per guild, flush Spotify→YT cache, destroy client, exit 0.
+- The `process.on('message')` listener is registered only when `typeof process.send === 'function'`, i.e. only in a genuinely forked child. A normal import of `src/index.js` must attach no IPC listener; otherwise importing it in a test or tool captures process messages.
 - Guild command sync is rate-limited (`guildSyncLimiter`: 3s window, burst 3) to stay inside Discord API limits.
 - Singletons attached to client: `logger`, `config`, `telemetry`, `settingsStore`, `sessionStore`, `playlistStore`, `likedStore`, `musicPlayer`, `shardInfo`.
 
@@ -30,7 +31,7 @@ Auralyn's bot process: entrypoints, environment config, wiring of commands/event
 
 ## Verification
 
-- `npm test` (`node --test`) must pass; `commands-load.test.js` exercises the command loader contract.
+- `npm test` (`node --test`) must pass. `commands-load.test.js` exercises the command loader contract; `shard-ipc.test.js` forks `test/helpers/shard-child.js` and asserts the typed shutdown message makes the child exit 0.
 - `loadConfig()` behavior is covered by tests and fails fast with clear errors on missing required env.
 
 ## Child DOX Index
