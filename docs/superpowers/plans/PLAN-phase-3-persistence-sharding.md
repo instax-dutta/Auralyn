@@ -112,15 +112,15 @@ Tests: `test/session-restore.test.js`, `test/session-lifecycle.test.js`
 Modify: `src/index.js`, `src/config.js`, `src/shard.js`
 Tests: `test/deployment-ownership.test.js`
 
-- [ ] `manager owns global scope` — RED: `src/index.js:207-211` deploys global
+- [x] `manager owns global scope` — RED: `src/index.js:207-211` deploys global
       commands in every process, so N shards issue N identical global PUTs and
       race each other. GREEN: only the process that is **not** a managed child
       deploys global. The gate is reliable: discord.js sets `SHARDING_MANAGER:
       true` in every child env at `node_modules/discord.js/src/sharding/Shard.js:70`,
       and the flag is currently read nowhere in `src/`.
-- [ ] `child owns its guild scope` — RED: no child reacts to `guildCreate` for
+- [x] `child owns its guild scope` — RED: no child reacts to `guildCreate` for
       deployment ownership. GREEN: a child deploys only its own guild.
-- [ ] `GUILD_ID does not change ownership` — RED: `src/utils/deploy-commands.js`
+- [x] `GUILD_ID does not change ownership` — RED: `src/utils/deploy-commands.js`
       `getCommandDeploymentTargets()` branches only on `config.guildId`, so a
       managed child with `GUILD_ID` unset still targets global. GREEN: ownership
       is decided by runtime role, not by `GUILD_ID`.

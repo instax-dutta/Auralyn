@@ -26,7 +26,8 @@ Shared helpers, JSON persistence stores, and external integrations used across t
 - `logger.js` is the single logging entry point (levels debug/info/warn/error, scoped children); nothing logs to console directly except its sink.
 - `embeds.js` + `music-ui.js` define the shared visual style; commands reuse these builders.
 - `deploy-commands.js` serves both the root `npm run deploy` script and the `guildCreate` sync path.
-- `deploy-commands.js` keeps one deployed-command hash per target (`global:<clientId>`, `guild:<clientId>:<guildId>`); never share a single module-level hash across scopes or one scope will suppress the others. `resetDeploymentState()` exists for test isolation.
+- `deploy-commands.js` keeps one deployed-command hash per target (`global:<clientId>`, `guild:<clientId>:<guildId>`); never share a single module-level hash across scopes or one scope will suppress the others.
+- Deployment ownership is a runtime role, never a config coincidence. `isManagedChildProcess()` reads `SHARDING_MANAGER`, which discord.js injects into every managed child; `getCommandDeploymentTargets(config, { isManagedChild })` gives global scope only to the manager or a standalone process. Never decide scope from `GUILD_ID` alone — a child with GUILD_ID unset must still not target global. `resetDeploymentState()` exists for test isolation.
 - Rate limits are handled by `deploy-retry.js` (`deployWithRetry`): retries only HTTP 429, honours `Retry-After`, otherwise backs off 1s then 2s, and gives up after two retries. The REST client is built with `retries: 0` and `rejectOnRateLimit: async () => true` because @discordjs/rest only throws when that callback is truthy.
 - `interaction-ids.js` is the ONLY place that parses component custom IDs. Each family declares its head fields, optional variable-length field, and tail. Never split a custom ID by fixed index: a playlist name may contain `:`.
 - Keep pure helpers (`formatters`, `time-parser`, `audio-filters`) free of dependencies for easy unit testing.
@@ -38,7 +39,7 @@ Shared helpers, JSON persistence stores, and external integrations used across t
 
 ## Verification
 
-- `npm test` (`node --test`). Storage: `test/storage-primitives.test.js`, `test/storage-lock.test.js`, `test/storage-contention.test.js`, `test/guild-settings-store.test.js`, `test/session-envelope.test.js`, `test/session-tombstone.test.js`, `test/store-migration.test.js`, `test/legacy-migration-e2e.test.js`. Other focused: `test/interaction-ids.test.js`, `test/deploy-retry.test.js`, `test/deploy-commands.test.js`, `test/command-deployment-state.test.js`, `test/settings-and-ops.test.js`, `test/static-contracts.test.js`.
+- `npm test` (`node --test`). Storage: `test/storage-primitives.test.js`, `test/storage-lock.test.js`, `test/storage-contention.test.js`, `test/guild-settings-store.test.js`, `test/session-envelope.test.js`, `test/session-tombstone.test.js`, `test/store-migration.test.js`, `test/legacy-migration-e2e.test.js`. Deployment: `test/deployment-ownership.test.js`, `test/command-deployment-state.test.js`. Other focused: `test/interaction-ids.test.js`, `test/deploy-retry.test.js`, `test/deploy-commands.test.js`, `test/command-deployment-state.test.js`, `test/settings-and-ops.test.js`, `test/static-contracts.test.js`.
 
 ## Child DOX Index
 

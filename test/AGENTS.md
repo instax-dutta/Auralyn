@@ -45,6 +45,7 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `legacy-migration-e2e.test.js` — a full pre-Phase-3 data directory upgrades intact
   - `session-lifecycle.test.js` — disconnect vs stop vs shutdown semantics
   - `session-restore.test.js` — restart hydration, tombstone skip, Lavalink reattach
+  - `deployment-ownership.test.js` — manager owns global scope, GUILD_ID never changes ownership
 
 ## TDD Gate
 
