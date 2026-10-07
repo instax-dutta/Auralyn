@@ -133,6 +133,53 @@ export class JsonSessionStore {
   /**
    * Guilds whose most recent outcome was a destructive stop.
    */
+  /**
+   * Lifts a pre-envelope sessions file into the `{ sessions, stopped }` shape.
+ *
+ * * A bare `{ [guildId]: envelope }` map is the pre-envelope layout. Entries are
+ * * only lifted when the file has no `sessions` key, so an already-migrated file
+ * * is left alone and the call is idempotent. Existing entries keep their
+ * * revision, so migration never rewrites a session that has already been
+ * * written in the new shape. The source file is never deleted.
+   */
+  async migrateLegacySessions() {
+    const { value } = await readJsonWithQuarantine(this.filePath);
+    const raw = value && typeof value === 'object' ? value : {};
+
+    // Already migrated, or nothing to do.
+    if (raw.sessions && typeof raw.sessions === 'object') return { migrated: 0, skipped: Object.keys(raw.sessions).length };
+
+    await mkdir(path.dirname(this.filePath), { recursive: true });
+
+    return withFileLock(this.filePath, async () => {
+      const { value: fresh } = await readJsonWithQuarantine(this.filePath);
+      const current = fresh && typeof fresh === 'object' ? fresh : {};
+      if (current.sessions && typeof current.sessions === 'object') {
+        return { migrated: 0, skipped: Object.keys(current.sessions).length };
+      }
+
+      const sessions = {};
+      let skipped = 0;
+      let migrated = 0;
+
+      for (const [guildId, envelope] of Object.entries(current)) {
+        if (guildId === 'stopped' || guildId === 'sessions') continue;
+        if (!envelope || typeof envelope !== 'object') continue;
+
+        sessions[guildId] = {
+          ...envelope,
+          revision: typeof envelope.revision === 'number' ? envelope.revision : 1,
+        };
+        migrated += 1;
+      }
+
+      this.cache = sessions;
+      await writeJsonAtomic(this.filePath, { sessions, stopped: current.stopped ?? {} });
+
+      return { migrated, skipped };
+    });
+  }
+
   async wasStopped(guildId) {
     const { value } = await readJsonWithQuarantine(this.filePath);
     return guildId in normaliseStoreFile(value).stopped;

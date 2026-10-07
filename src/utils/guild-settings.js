@@ -1,4 +1,5 @@
 import { mkdir, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { dataPath } from './data-dir.js';
 import { writeJsonAtomic, readJsonWithQuarantine } from './atomic-json.js';
@@ -156,6 +157,54 @@ export class GuildSettingsStore {
     }
 
     return nextSettings;
+  }
+
+  /**
+   * Lifts a pre-per-guild `guild-settings.json` map into one file per guild.
+   *
+   * A valid canonical file always wins over the legacy source, so re-running
+   * this can never roll a guild back to older values. A corrupt canonical file
+   * is quarantined and the legacy source is used instead, so recoverable data is
+   * not discarded. The legacy file is never deleted.
+   */
+  async migrateLegacySettings() {
+    if (this.legacyMode) return { migrated: 0, skipped: 0 };
+
+    const root = this.dataRoot ?? dataPath();
+    const legacyPath = path.join(root, LEGACY_FILE_NAME);
+
+    const { value } = await readJsonWithQuarantine(legacyPath);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return { migrated: 0, skipped: 0 };
+
+    let migrated = 0;
+    let skipped = 0;
+
+    for (const [guildId, settings] of Object.entries(value)) {
+      if (!settings || typeof settings !== 'object') continue;
+
+      const target = guildSettingsPath(guildId, { dataRoot: this.dataRoot });
+
+      if (existsSync(target)) {
+        // Never let migration overwrite a value that already exists: it may be
+        // newer than the legacy source. A canonical file that will not parse is
+        // quarantined first so the legacy value is not lost with it.
+        const existing = await readJsonWithQuarantine(target);
+        if (!existing.quarantinedTo) {
+          skipped += 1;
+          continue;
+        }
+
+        this.logger?.warn?.('guild_settings_quarantined', {
+          file: target,
+          quarantinedTo: existing.quarantinedTo,
+        });
+      }
+
+      await this.writeGuild(guildId, sanitizeGuildSettings(settings));
+      migrated += 1;
+    }
+
+    return { migrated, skipped };
   }
 
   async getAll() {
