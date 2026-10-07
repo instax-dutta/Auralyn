@@ -50,6 +50,7 @@ export class MusicPlayer {
     this.queueManager = new QueueManager(logger.child('queue'));
     this.nowPlayingMessages = new Map();
     this.persistStamps = new Map();
+    this.persistFailures = new Map();
     this.restorableGuilds = new Set();
     // Every timer this player starts is registered so shutdown can release the
     // ones no guild ever cleared.
@@ -594,6 +595,7 @@ export class MusicPlayer {
 
     this.queueManager.setListeners(guildId, null);
     this.queueManager.setLavalinkPlayer(guildId, null);
+    this.persistFailures.delete(guildId);
   }
 
   async pause(guildId) {
@@ -991,11 +993,45 @@ export class MusicPlayer {
         voiceChannelId: state.voiceChannel?.id ?? null,
         updatedAt: new Date(now).toISOString(),
       });
+      this._notePersistSuccess(guildId);
     } catch (error) {
-      // A stale rejection means another writer already holds a newer view; it
-      // must not surface as an unhandled rejection from a fire-and-forget call.
-      if (error?.name !== 'StaleRevisionError') throw error;
-      this.logger.debug(`Skipped a stale session write for guild ${guildId}`);
+      // A stale rejection means another writer already holds a newer view, which
+      // is an expected outcome of a race and not a fault.
+      if (error?.name === 'StaleRevisionError') {
+        this.logger.debug(`Skipped a stale session write for guild ${guildId}`);
+        return;
+      }
+
+      // Every other failure is swallowed here on purpose. This method is called
+      // with `void` from the queue paths, so rethrowing turns a disk error into an
+      // unhandled rejection, which terminates Node and takes the shard down.
+      // Losing a session snapshot is a durability loss; playback does not depend
+      // on being able to write one.
+      this._notePersistFailure(guildId, error);
     }
+  }
+
+  /**
+   * Records that persistence is working again, once per outage, so a
+   * permanently unwritable data directory produces one warning and one recovery
+   * rather than a line per track change.
+   */
+  _notePersistSuccess(guildId) {
+    const previous = this.persistFailures.get(guildId);
+    if (previous === undefined) return;
+
+    this.persistFailures.delete(guildId);
+    this.logger.info('session_persist_recovered', { guildId, previousCode: previous });
+  }
+
+  _notePersistFailure(guildId, error) {
+    const code = error?.code ?? error?.name ?? null;
+    const previous = this.persistFailures.get(guildId);
+
+    // Already reporting this exact failure for this guild.
+    if (previous === code) return;
+
+    this.persistFailures.set(guildId, code);
+    this.logger.warn('session_persist_failed', { guildId, code, previousCode: previous });
   }
 }

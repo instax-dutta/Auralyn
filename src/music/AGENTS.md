@@ -39,6 +39,9 @@ The Shoukaku/Lavalink wrapper that owns playback, per-guild queues, and track re
 
 - Every timer `MusicPlayer` starts (now-playing refresh re-arms, sleep timer) is registered with `this.timers`, a `TimerRegistry` from `utils/timer-registry.js`. Never add a bare `setTimeout` here: the refresh chain re-arms itself from its own callback, so an untracked timer cannot be stopped once its guild state is gone. `shutdown()` disposes the registry and returns `timersReleased`.
 
+- `persistGuildState()` must never reject. It is called with `void` from nine queue paths, so any rejection becomes an unhandled rejection and Node 20 terminates the process. A disk failure (an unwritable or read-only data directory) costs a session snapshot, not playback.
+- Persistence failures are reported with the fixed codes `session_persist_failed` / `session_persist_recovered`, once per outage per guild. Never re-log on every call: this runs on every queue mutation.
+
 ## Verification
 
 - `test/music-player.test.js` — player lifecycle/queue behavior with stubbed Shoukaku
