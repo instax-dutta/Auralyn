@@ -200,7 +200,7 @@ Deferred, and **not** required for this phase's exit criteria:
 
 ## Handoff requirements
 
-`docs/superpowers/plans/phase-3-handoff.md` must record: changed paths, migration and
+`docs/superpowers/plans/PLAN-phase-3-handoff.md` must record: changed paths, migration and
 corruption results, restart evidence, deployment ownership, shutdown evidence, the
 deferred exit criterion listed above as **unmet**, and an explicit statement that no
 live Discord or Lavalink smoke test was run.
