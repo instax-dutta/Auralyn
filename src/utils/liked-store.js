@@ -1,51 +1,57 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { dataPath } from './data-dir.js';
+import { writeJsonAtomic, readJsonWithQuarantine } from './atomic-json.js';
+import { withFileLock } from './storage-lock.js';
 
 export class LikedStore {
-  constructor() {
+  constructor({ logger } = {}) {
     this.cache = new Map();
+    this.logger = logger;
   }
 
   getUserFilePath(userId) {
     return dataPath('liked', `${userId}.json`);
   }
 
-  _loadSync(userId) {
-    const filePath = this.getUserFilePath(userId);
-    if (!existsSync(filePath)) {
-      return { songs: [] };
-    }
-    try {
-      const raw = readFileSync(filePath, 'utf8');
-      return JSON.parse(raw);
-    } catch {
-      return { songs: [] };
-    }
-  }
-
   async _load(userId) {
-    if (this.cache.has(userId)) return this.cache.get(userId);
+    // Always re-read: a cached view cannot see another store instance's write.
+    const { value, quarantinedTo } = await readJsonWithQuarantine(this.getUserFilePath(userId));
 
-    const filePath = this.getUserFilePath(userId);
-    try {
-      const raw = await readFile(filePath, 'utf8');
-      const data = JSON.parse(raw);
-      this.cache.set(userId, data);
-      return data;
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      const empty = { songs: [] };
-      this.cache.set(userId, empty);
-      return empty;
+    if (quarantinedTo) {
+      this.logger?.warn?.('liked_quarantined', { userId, quarantinedTo });
     }
+
+    const data = value && typeof value === 'object' && Array.isArray(value.songs)
+      ? value
+      : { songs: [] };
+
+    this.cache.set(userId, data);
+    return data;
   }
 
-  async _persist(userId, data) {
+  /**
+   * Applies `mutate` to the user's canonical file inside the per-user lock and
+   * writes it atomically, so two store instances cannot erase each other's
+   * liked songs. `mutate` may return `false` to report "nothing changed",
+   * which skips the write entirely.
+   */
+  async _mutate(userId, mutate) {
     const filePath = this.getUserFilePath(userId);
     await mkdir(dataPath('liked'), { recursive: true });
-    await writeFile(filePath, JSON.stringify(data, null, 2));
-    this.cache.set(userId, data);
+
+    return withFileLock(filePath, async () => {
+      const { value } = await readJsonWithQuarantine(filePath);
+      const current = value && typeof value === 'object' && Array.isArray(value.songs)
+        ? value
+        : { songs: [] };
+
+      const outcome = await mutate(current);
+      if (outcome === false) return current;
+
+      await writeJsonAtomic(filePath, current);
+      this.cache.set(userId, current);
+      return current;
+    });
   }
 
   async getLikedSongs(userId) {
@@ -54,55 +60,63 @@ export class LikedStore {
   }
 
   async likeTrack(userId, track) {
-    const data = await this._load(userId);
     const uri = track.info?.uri;
     if (!uri) return false;
 
-    const exists = data.songs.some((s) => s.uri === uri);
-    if (exists) return false;
+    let added = false;
 
-    data.songs.unshift({
-      encoded: track.encoded,
-      title: track.info?.title ?? 'Unknown',
-      uri,
-      duration: track.info?.length ?? 0,
-      addedAt: new Date().toISOString(),
+    await this._mutate(userId, current => {
+      if (current.songs.some(song => song.uri === uri)) return false;
+
+      current.songs.unshift({
+        encoded: track.encoded,
+        title: track.info?.title ?? 'Unknown',
+        uri,
+        duration: track.info?.length ?? 0,
+        addedAt: new Date().toISOString(),
+      });
+      added = true;
     });
 
-    await this._persist(userId, data);
-    return true;
+    return added;
   }
 
   async unlikeTrack(userId, uri) {
-    const data = await this._load(userId);
-    const before = data.songs.length;
-    data.songs = data.songs.filter((s) => s.uri !== uri);
-    if (data.songs.length === before) return false;
+    let removed = false;
 
-    await this._persist(userId, data);
-    return true;
+    await this._mutate(userId, current => {
+      const before = current.songs.length;
+      current.songs = current.songs.filter(song => song.uri !== uri);
+      if (current.songs.length === before) return false;
+      removed = true;
+    });
+
+    return removed;
   }
 
   async clearLikedSongs(userId) {
-    const data = await this._load(userId);
-    const count = data.songs.length;
-    data.songs = [];
-    await this._persist(userId, data);
+    let count = 0;
+
+    await this._mutate(userId, current => {
+      count = current.songs.length;
+      current.songs = [];
+    });
+
     return count;
   }
 
   async sortLikedSongs(userId, key) {
-    const data = await this._load(userId);
-    if (key === 'title') {
-      data.songs.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''));
-    } else if (key === 'duration') {
-      data.songs.sort((a, b) => (a.duration ?? 0) - (b.duration ?? 0));
-    } else if (key === 'date_added') {
-      data.songs.sort((a, b) => new Date(b.addedAt ?? 0) - new Date(a.addedAt ?? 0));
-    } else {
-      throw new Error(`Unknown sort key: ${key}`);
-    }
-    await this._persist(userId, data);
-    return data.songs;
+    return this._mutate(userId, current => {
+      if (key === 'title') {
+        current.songs.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''));
+      } else if (key === 'duration') {
+        current.songs.sort((a, b) => (a.duration ?? 0) - (b.duration ?? 0));
+      } else if (key === 'date_added') {
+        current.songs.sort((a, b) => new Date(b.addedAt ?? 0) - new Date(a.addedAt ?? 0));
+      } else {
+        throw new Error(`Unknown sort key: ${key}`);
+      }
+      return current;
+    }).then(data => data.songs);
   }
 }
