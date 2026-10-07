@@ -5,6 +5,7 @@ import path from 'path';
 import { dataPath } from './utils/data-dir.js';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { isMainModule } from './utils/is-main-module.js';
 import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
 import { createLogger } from './utils/logger.js';
@@ -292,9 +293,9 @@ if (typeof process.send === 'function') {
   });
 }
 
-const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isMain = isMainModule(import.meta.url, process.argv[1]);
 
-if (isMainModule) {
+if (isMain) {
   main().catch(error => {
     logger.error('Auralyn failed to start', error);
     process.exit(1);

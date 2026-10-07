@@ -54,6 +54,7 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `cache-persistence.test.js` — Spotify→YT cache merges under the lock, quarantines corruption, keeps expired entries off disk, and owns its debounce timer
   - `timer-ownership.test.js` — every registry timer is released by `dispose()`; asserts a disposed callback stops firing, because unref'd timers are invisible to `process.getActiveResourcesInfo()`
   - `voice-empty-channel.test.js` — `voiceStateUpdate.js` disconnects (not stops) on an empty channel, across all five branches
+  - `is-main-module.test.js` — the entrypoint guard resolves correctly, including paths containing `#` and `%` that break naive URL concatenation
 
 ## TDD Gate
 

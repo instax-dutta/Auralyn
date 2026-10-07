@@ -7,7 +7,7 @@ Auralyn's bot process: entrypoints, environment config, wiring of commands/event
 ## Ownership
 
 - `index.js` — process bootstrap: client construction (intents, sharding), Shoukaku node, stores, command/event loaders, guildCreate command sync, graceful shutdown, exports `main()`, `client`, `shoukaku`
-- `shard.js` — ShardingManager launcher (default container entrypoint via `scripts/start.sh`; override with `BOT_ENTRYPOINT`). Bootstrap only: construction, spawn, and signal registration sit behind an `isMainModule` guard so importing the file has no side effects.
+- `shard.js` — ShardingManager launcher (default container entrypoint via `scripts/start.sh`; override with `BOT_ENTRYPOINT`). Bootstrap only: construction, spawn, and signal registration sit behind an `isMainModule` guard so importing the file has no side effects. Both entrypoints get that guard from `utils/is-main-module.js`.
 - `shard-manager.js` — `HyperscaleShardManager` and `readShardManagerConfig()`, importable without a gateway. The manager and logger are injectable so shutdown can be tested against fakes.
 - `config.js` — `loadConfig()`: the single env parser; validates `DISCORD_TOKEN`, `CLIENT_ID`, `LAVALINK_PASSWORD` and maps all documented env vars
 - `deploy-commands.js` — standalone command-deploy script (`npm run deploy`)

@@ -1,6 +1,6 @@
-import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { HyperscaleShardManager, readShardManagerConfig } from './shard-manager.js';
+import { isMainModule } from './utils/is-main-module.js';
 
 dotenv.config();
 
@@ -9,21 +9,21 @@ if (!process.env.DISCORD_TOKEN) {
   process.exit(1);
 }
 
-const logger = (await import('./utils/logger.js')).createLogger({
-  level: process.env.LOG_LEVEL ?? 'info',
-  scope: 'shard-mgr',
-});
+// Importing this file must not spawn shards, allocate a manager, or register
+// process-wide handlers; only running it as the entrypoint does. `scripts/start.sh`
+// launches this file directly, so the container path depends on the guard
+// resolving true for `node /app/src/shard.js`.
+const isMain = isMainModule(import.meta.url, process.argv[1]);
 
-const config = readShardManagerConfig();
+if (isMain) {
+  const logger = (await import('./utils/logger.js')).createLogger({
+    level: process.env.LOG_LEVEL ?? 'info',
+    scope: 'shard-mgr',
+  });
 
-const hyperscaleManager = new HyperscaleShardManager({ logger, config });
+  const config = readShardManagerConfig();
+  const hyperscaleManager = new HyperscaleShardManager({ logger, config });
 
-// Importing this file must not spawn shards or register process-wide handlers;
-// only running it as the entrypoint does.
-const isMainModule = process.argv[1] &&
-  import.meta.url === new URL(`file://${process.argv[1]}`).href;
-
-if (isMainModule) {
   hyperscaleManager.spawn().catch(() => {
     process.exitCode = 1;
   });

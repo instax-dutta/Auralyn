@@ -9,7 +9,7 @@ Shared helpers, JSON persistence stores, and external integrations used across t
 - Stores: `guild-settings.js`, `playlist-store.js`, `liked-store.js`, `session-store.js`, `data-dir.js`
 - Integrations: `spotify-resolver.js`, `spotify-check.js`, `spotify-yt-cache.js`, `tracks.js`, `deploy-commands.js`
 - Presentation/parsing: `embeds.js`, `music-ui.js`, `formatters.js`, `time-parser.js`, `audio-filters.js`
-- Cross-cutting: `logger.js`, `permissions.js`, `telemetry.js`, `rate-limiter.js`, `timer-registry.js`
+- Cross-cutting: `logger.js`, `permissions.js`, `telemetry.js`, `rate-limiter.js`, `timer-registry.js`, `is-main-module.js`
 - Storage primitives: `atomic-json.js`, `storage-lock.js` (owned here, used by every store)
 
 ## Local Contracts
@@ -32,6 +32,7 @@ Shared helpers, JSON persistence stores, and external integrations used across t
 - `spotify-resolver.js` is the ONLY module that calls `spotify-url-info`; `tracks.js` is the public track-resolution API used by commands.
 - `logger.js` is the single logging entry point (levels debug/info/warn/error, scoped children); nothing logs to console directly except its sink.
 - `embeds.js` + `music-ui.js` define the shared visual style; commands reuse these builders.
+- `is-main-module.js` owns the single definition of "am I the entrypoint", used by `src/index.js` and `src/shard.js`. Both are importable without side effects, so a wrong answer is silent: the process loads, passes every test, and never starts. Never build that URL with `file://${argv[1]}` string concatenation: `#` and `%` in a path change the URL and the guard silently resolves false. `pathToFileURL` is mandatory.
 - `deploy-commands.js` serves both the root `npm run deploy` script and the `guildCreate` sync path.
 - `deploy-commands.js` keeps one deployed-command hash per target (`global:<clientId>`, `guild:<clientId>:<guildId>`); never share a single module-level hash across scopes or one scope will suppress the others.
 - Deployment ownership is a runtime role, never a config coincidence. `isManagedChildProcess()` reads `SHARDING_MANAGER`, which discord.js injects into every managed child; `getCommandDeploymentTargets(config, { isManagedChild })` gives global scope only to the manager or a standalone process. Never decide scope from `GUILD_ID` alone — a child with GUILD_ID unset must still not target global. `resetDeploymentState()` exists for test isolation.
