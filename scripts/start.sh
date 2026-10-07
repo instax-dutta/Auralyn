@@ -104,6 +104,19 @@ echo "Runtime: Node $(node --version), Java $(java -version 2>&1 | head -n 1)"
 echo "Lavalink: $LAVALINK_HOST:$LAVALINK_PORT"
 
 cd "$LAVALINK_DIR"
+# Lavalink needs a writable temp dir. Under Pterodactyl the whole rootfs is
+# read-only, including /tmp, and Undertow creates its document base under
+# java.io.tmpdir, so leaving the default kills startup with
+# "FileSystemException: /tmp/undertow-docbase...: Read-only file system".
+# It lives under the resolved data dir because that is the one place this process
+# is known to be able to write; the container cannot create directories directly
+# under /home/container, which belongs to another uid.
+LAVALINK_TMPDIR="${LAVALINK_TMPDIR:-$DATA_DIR/lavalink-tmp}"
+if ! mkdir -p "$LAVALINK_TMPDIR" 2>/dev/null; then
+    echo "ERROR: could not create the Lavalink temp dir $LAVALINK_TMPDIR." >&2
+    exit 78
+fi
+
 # JVM tuning for audio DSP performance:
 #   -server           : force server-mode JIT (C2 compiler) from the start
 #   -XX:+UseG1GC      : G1 collector — shorter, predictable GC pauses vs default
@@ -111,7 +124,8 @@ cd "$LAVALINK_DIR"
 #   -XX:+DisableExplicitGC  : ignore System.gc() calls from libraries
 #   -XX:+OptimizeStringConcat: micro-opt for string-heavy logging paths
 #   -XX:+UseStringDeduplication: reduce heap pressure from repeated String objects
-java -server \
+java -Djava.io.tmpdir="$LAVALINK_TMPDIR" \
+    -server \
     -Xmx"$LAVALINK_MEMORY" \
     -Xms256m \
     -XX:+UseG1GC \

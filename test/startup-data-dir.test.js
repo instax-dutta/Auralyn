@@ -31,7 +31,7 @@ const START_SH = path.join(REPO, 'scripts', 'start.sh');
 // read. Lingering stubs are worse: they inherit the stdout pipe and execFile
 // then blocks until they exit.
 const STUB = `#!/bin/sh
-echo "DATA_DIR_SEEN=[$DATA_DIR]"
+echo "DATA_DIR_SEEN=[$DATA_DIR] ARGS=[$*]"
 `;
 
 async function runStart({ dataDir, defaultWritable = true, fallbackWritable = true }) {
@@ -152,6 +152,30 @@ test('an unwritable data dir is reported and refused, never silently accepted', 
     `a data dir that cannot be written was not reported:\n${combined}`);
   assert.equal(exitCode, 78,
     'the script did not exit with the documented config-error code, so a caller cannot detect it');
+});
+
+test('Lavalink is given a writable temp dir, because /tmp is read-only too', async () => {
+  // Second read-only-rootfs failure, found only after the plugin one was fixed:
+  //
+  //   java.nio.file.FileSystemException: /tmp/undertow-docbase.2333.405622...:
+  //   Read-only file system
+  //     at java.nio.file.TempFileHelper.createTempDirectory
+  //
+  // Undertow creates its document base under java.io.tmpdir, and /tmp is on the
+  // read-only rootfs just like /app/data. Lavalink must be pointed at a writable
+  // directory, and the script has to create it: the container cannot mkdir inside
+  // /home/container itself, which is owned by another uid.
+  const { stdout, fallback } = await runStart({ dataDir: undefined, defaultWritable: false });
+
+  const javaLine = stdout.split('\n').find(line => line.includes('-jar Lavalink.jar'));
+  assert.ok(javaLine, `the java invocation was not observed:\n${stdout}`);
+
+  const tmpdir = javaLine.match(/-Djava\.io\.tmpdir=(\S+)/)?.[1];
+  assert.ok(tmpdir,
+    `java was launched without -Djava.io.tmpdir, so Undertow will fail on a read-only /tmp:\n${javaLine}`);
+
+  assert.ok(tmpdir.startsWith(fallback) || tmpdir === '/tmp',
+    `java.io.tmpdir=${tmpdir} is neither the resolved data dir nor an explicitly opted-in /tmp`);
 });
 
 test('the script still enforces its documented exit codes', async () => {
