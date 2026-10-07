@@ -43,6 +43,8 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `session-tombstone.test.js` — durable stop records
   - `store-migration.test.js` — legacy migration precedence and idempotency
   - `legacy-migration-e2e.test.js` — a full pre-Phase-3 data directory upgrades intact
+  - `session-lifecycle.test.js` — disconnect vs stop vs shutdown semantics
+  - `session-restore.test.js` — restart hydration, tombstone skip, Lavalink reattach
 
 ## TDD Gate
 

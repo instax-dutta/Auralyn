@@ -89,21 +89,21 @@ Tests: `test/settings-migration.test.js`, `test/session-migration.test.js`
 Modify: `src/music/player.js`, `src/events/ready.js`, `src/music/queue.js`
 Tests: `test/session-restore.test.js`, `test/session-lifecycle.test.js`
 
-- [ ] `restore logical state` — RED: `src/events/ready.js` hydrates nothing, so a
+- [x] `restore logical state` — RED: `src/events/ready.js` hydrates nothing, so a
       restart loses the queue. GREEN: the ready handler loads each owned guild's
       session into the queue manager without connecting to voice.
-- [ ] `reattach after lavalink ready` — RED: the `shoukaku.on('ready')`
+- [x] `reattach after lavalink ready` — RED: the `shoukaku.on('ready')`
       subscriber at `src/index.js:153` only logs and records telemetry; it never
       resumes a restored current track, so a restored queue sits idle. GREEN: that
       subscriber (or a dedicated one) resumes playback at the stored position once
       Lavalink is connected.
-- [ ] `disconnect is recoverable` — RED: `player.js:528` `disconnect()` deletes the
+- [x] `disconnect is recoverable` — RED: `player.js:528` `disconnect()` deletes the
       persisted session, so an empty voice channel loses the queue on restart.
       GREEN: `disconnect()` flushes a snapshot and keeps it.
-- [ ] `stop is destructive` — RED: `stop()` reaches `disconnect()`, which under the
+- [x] `stop is destructive` — RED: `stop()` reaches `disconnect()`, which under the
       recoverable contract would re-persist the session it is trying to clear.
       GREEN: `stop()` clears through `leaveVoiceOnly()` and writes a tombstone.
-- [ ] `shutdown preserves recoverable sessions` — RED: shutdown disconnects every
+- [x] `shutdown preserves recoverable sessions` — RED: shutdown disconnects every
       guild through the destructive path. GREEN: shutdown quiesces admission,
       flushes, and leaves restorable sessions intact.
 

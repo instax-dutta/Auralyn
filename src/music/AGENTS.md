@@ -16,7 +16,14 @@ The Shoukaku/Lavalink wrapper that owns playback, per-guild queues, and track re
 - `MusicPlayer.enqueue()` and `MusicPlayer.enqueueFront()` take the SAME options object (`{ guildId, track, textChannel, voiceChannel }`). A positional signature on one and an object on the other silently keys player state on the argument object and enqueues nothing.
 - Both enqueue paths must start playback when the guild is idle, normalise absent `requestedByUserId`/`requestedByName` to `null`, and persist guild state.
 - `MusicPlayer.restoreSession({ guildId, currentTrack, queue, textChannel, voiceChannel })` is the only supported way to rebuild playback from a snapshot. It preserves queue order; replaying `enqueueFront` per item reverses the queue because `enqueueFront` unshifts.
-- `MusicPlayer.disconnect()` is recoverable (flushes a snapshot); `MusicPlayer.stop()` is destructive (clears the queue and current track); `leaveVoiceOnly()` removes transport only. Do not route a destructive operation through `disconnect()`.
+- The three teardown paths are distinct and must stay that way:
+  - `disconnect(guildId)` is recoverable: flushes a snapshot, leaves voice, keeps the queue, records no tombstone
+  - `stop(guildId)` is destructive: clears in place, leaves voice, records a tombstone. Never route it through `disconnect()`, which would re-persist the session it is clearing
+  - `shutdown()` disconnects every guild recoverably so a redeploy resumes
+  `leaveVoiceOnly()` removes transport only and keeps the in-memory queue.
+- `restoreSessions({ client })` hydrates persisted sessions into logical state without touching voice; `reattachRestored()` resumes the restored current track once Lavalink is connected. Reattach must not call `playNext`, which shifts from the queue and would skip the current track.
+- Channels are persisted as ids and resolved from `client.channels.cache` at restore time. A channel that no longer exists must not discard the restored queue.
+- `persistGuildState()` stamps `updatedAt` from a monotonic per-guild counter, never a wall clock, so racing persists stay ordered. It swallows `StaleRevisionError` at debug level because fire-and-forget callers cannot handle it.
 
 
 - External code (commands, events) interacts only through `client.musicPlayer` and the re-exports of `music/index.js`; no other module touches Shoukaku players directly.
