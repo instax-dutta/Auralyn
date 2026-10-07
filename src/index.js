@@ -94,8 +94,23 @@ const shoukaku = new Shoukaku(
 );
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
-client.settingsStore = new GuildSettingsStore();
+client.settingsStore = new GuildSettingsStore({ logger });
 client.sessionStore = new JsonSessionStore({ filePath: dataPath('sessions.json') });
+
+// Lift any pre-per-guild data forward before playback reads it. Both are
+// idempotent and never delete their source.
+try {
+  const settingsMigration = await client.settingsStore.migrateLegacySettings();
+  if (settingsMigration.migrated > 0) {
+    logger.info(`Migrated ${settingsMigration.migrated} guild(s) to per-guild settings files`);
+  }
+  const sessionMigration = await client.sessionStore.migrateLegacySessions();
+  if (sessionMigration.migrated > 0) {
+    logger.info(`Migrated ${sessionMigration.migrated} session(s) to the versioned envelope`);
+  }
+} catch (error) {
+  logger.error('Failed to migrate legacy persistence files', error);
+}
 client.playlistStore = new PlaylistStore();
 client.likedStore = new LikedStore();
 client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry, settingsStore: client.settingsStore, sessionStore: client.sessionStore });
