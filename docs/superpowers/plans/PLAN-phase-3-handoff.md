@@ -144,3 +144,9 @@ real load, which is operational work, not a unit test. This must not be reported
   `Collection`, and a test asserting on a scenario the handler was never asked about.
 - Every slice is one atomic commit; production change and its DOX update are not always
   co-located, and this handoff records the deviation rather than hiding it.
+- **The knowledge graph is NOT current.** The project convention is to run
+  `graphify update .` after code changes, but `graphify` is not installed on this machine
+  (not on `PATH`, and neither `~/.claude/skills/graphify` nor an installed package exists).
+  `graphify-out/` still reflects the pre-Phase-3 tree, so treat the graph as stale for the
+  whole of Phase 3 until `graphify update .` is run where the tool exists. This was not
+  silently skipped.
