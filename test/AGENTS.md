@@ -35,6 +35,14 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `commands-playnext.test.js` — `enqueueFront` options contract, idle start, requester metadata
   - `commands-forcefix.test.js` — order-preserving restore and playback resume
   - `shard-ipc.test.js` — forks `test/helpers/shard-child.js`, asserts typed shutdown exits 0
+  - `storage-primitives.test.js` — atomic replacement, read-back, corrupt-file quarantine
+  - `storage-lock.test.js` — lock release, dead/abandoned-owner reclamation, heartbeat
+  - `storage-contention.test.js` — cross-instance and cross-process writes
+  - `guild-settings-store.test.js` — one file per guild, isolation, restart
+  - `session-envelope.test.js` — revision envelope, stale-write rejection
+  - `session-tombstone.test.js` — durable stop records
+  - `store-migration.test.js` — legacy migration precedence and idempotency
+  - `legacy-migration-e2e.test.js` — a full pre-Phase-3 data directory upgrades intact
 
 ## TDD Gate
 

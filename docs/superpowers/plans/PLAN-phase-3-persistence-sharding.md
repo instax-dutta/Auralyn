@@ -67,18 +67,18 @@ Tests: `test/storage-primitives.test.js`, `test/storage-contention.test.js`
 Modify: `src/utils/guild-settings.js`, `src/utils/session-store.js`, `src/utils/data-dir.js`
 Tests: `test/settings-migration.test.js`, `test/session-migration.test.js`
 
-- [ ] `per-guild file layout` — RED: `new GuildSettingsStore()` writes one shared
+- [x] `per-guild file layout` — RED: `new GuildSettingsStore()` writes one shared
       map for every guild, per `guild-settings.js:79`. GREEN: one file per guild
       under `guilds/<id>/settings.json`, resolved through `dataPath()`.
-- [ ] `session envelope and write token` — RED: `session-store.js:29` `save()`
+- [x] `session envelope and write token` — RED: `session-store.js:29` `save()`
       overwrites unconditionally, so a stale writer can clobber a newer session.
       GREEN: the envelope carries `revision` and a write token; a stale write
       throws `StaleRevisionError`.
-- [ ] `destructive tombstone` — RED: `session-store.js:41` `delete()` removes the
+- [x] `destructive tombstone` — RED: `session-store.js:41` `delete()` removes the
       session with no record that the stop was intentional, so a restart cannot
       distinguish "stopped" from "never played". GREEN: a tombstone file records
       the stop and restore skips it.
-- [ ] `legacy migration` — RED: with both a legacy flat file and a per-guild file
+- [x] `legacy migration` — RED: with both a legacy flat file and a per-guild file
       present, the legacy content is silently dropped. GREEN: valid canonical wins;
       corrupt canonical with a valid legacy source migrates from legacy and
       quarantines the corrupt file; migration is idempotent and never deletes the

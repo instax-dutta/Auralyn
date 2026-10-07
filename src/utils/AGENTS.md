@@ -17,6 +17,10 @@ Shared helpers, JSON persistence stores, and external integrations used across t
 - Never persist with bare `writeFile`. Use `writeJsonAtomic()` from `atomic-json.js`: it writes a unique sibling temp file, fsyncs, renames, and fsyncs the directory, so a reader never observes a partial file and a failure leaves the previous file intact.
 - Never parse a persisted file inline. Use `readJsonWithQuarantine()`, which moves unparseable content to `<name>.corrupt-<ts>` and returns `null` so one bad file cannot block startup for every guild.
 - Any read-modify-write of a store MUST go through `withFileLock()` from `storage-lock.js` and re-read the canonical file inside the lock. Writing a cached view erases another writer's entries. `withPathQueue` serialises in-process; the on-disk lock covers other processes.
+- `GuildSettingsStore` writes one file per guild under `guilds/<id>/settings.json`. Passing `filePath` selects the legacy single-file map, which is test-only and is also the migration source. Always construct without arguments in production.
+- `JsonSessionStore` persists `{ sessions: { [guildId]: envelope }, stopped: { [guildId]: iso } }`. Every envelope carries a store-assigned `revision`; a write whose `updatedAt` predates what is stored throws `StaleRevisionError`. `delete()` is a destructive stop and records a tombstone, which `save()` clears.
+- Sessions are read from disk on every `get()`. Never serve them from a cached view: another shard's writes are invisible to a cache.
+- `migrateLegacySettings()` and `migrateLegacySessions()` run once at startup. Both are idempotent, never delete their source, and never overwrite an existing canonical value.
 - A held lock is heartbeated, so only an abandoned lock ages out. Never raise `staleMs` above the heartbeat interval.
 - `spotify-resolver.js` is the ONLY module that calls `spotify-url-info`; `tracks.js` is the public track-resolution API used by commands.
 - `logger.js` is the single logging entry point (levels debug/info/warn/error, scoped children); nothing logs to console directly except its sink.
@@ -34,7 +38,7 @@ Shared helpers, JSON persistence stores, and external integrations used across t
 
 ## Verification
 
-- `npm test` (`node --test`). Storage: `test/storage-primitives.test.js`, `test/storage-lock.test.js`, `test/storage-contention.test.js`. Other focused: `test/interaction-ids.test.js`, `test/deploy-retry.test.js`, `test/deploy-commands.test.js`, `test/command-deployment-state.test.js`, `test/settings-and-ops.test.js`, `test/static-contracts.test.js`.
+- `npm test` (`node --test`). Storage: `test/storage-primitives.test.js`, `test/storage-lock.test.js`, `test/storage-contention.test.js`, `test/guild-settings-store.test.js`, `test/session-envelope.test.js`, `test/session-tombstone.test.js`, `test/store-migration.test.js`, `test/legacy-migration-e2e.test.js`. Other focused: `test/interaction-ids.test.js`, `test/deploy-retry.test.js`, `test/deploy-commands.test.js`, `test/command-deployment-state.test.js`, `test/settings-and-ops.test.js`, `test/static-contracts.test.js`.
 
 ## Child DOX Index
 
