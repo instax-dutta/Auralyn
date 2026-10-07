@@ -51,7 +51,7 @@ test('a write older than what is stored is rejected', async () => {
     'a stale write silently overwrote a newer session',
   );
 
-  const stored = JSON.parse(await readFile(path.join(dir, 'sessions.json'), 'utf8'));
+  const stored = JSON.parse(await readFile(path.join(dir, 'sessions.json'), 'utf8')).sessions;
   assert.equal(
     stored['guild-a'].updatedAt,
     '2026-01-01T00:00:05.000Z',
@@ -70,7 +70,7 @@ test('a rejected write leaves every other field intact', async () => {
     /stale/i,
   );
 
-  const stored = JSON.parse(await readFile(path.join(dir, 'sessions.json'), 'utf8'));
+  const stored = JSON.parse(await readFile(path.join(dir, 'sessions.json'), 'utf8')).sessions;
   assert.equal(stored['guild-a'].volume, 42);
 });
 

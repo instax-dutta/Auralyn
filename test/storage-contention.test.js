@@ -25,7 +25,7 @@ test('a second store instance does not erase the first instance write', async ()
   await first.save('guild-a', snapshot('guild-a'));
   await second.save('guild-b', snapshot('guild-b'));
 
-  const onDisk = JSON.parse(await readFile(file, 'utf8'));
+  const onDisk = JSON.parse(await readFile(file, 'utf8')).sessions ?? {};
 
   assert.deepEqual(
     Object.keys(onDisk).sort(),
@@ -46,7 +46,7 @@ test('two store instances on a pre-existing file both keep their writes', async 
   await first.save('guild-a', snapshot('guild-a'));
   await second.save('guild-b', snapshot('guild-b'));
 
-  const onDisk = JSON.parse(await readFile(file, 'utf8'));
+  const onDisk = JSON.parse(await readFile(file, 'utf8')).sessions ?? {};
 
   assert.deepEqual(
     Object.keys(onDisk).sort(),
@@ -64,7 +64,7 @@ test('an overwriting write for one guild preserves the other guild', async () =>
   await writer.save('guild-b', snapshot('guild-b'));
   await writer.save('guild-a', { ...snapshot('guild-a'), volume: 42 });
 
-  const onDisk = JSON.parse(await readFile(file, 'utf8'));
+  const onDisk = JSON.parse(await readFile(file, 'utf8')).sessions ?? {};
 
   assert.equal(onDisk['guild-a'].volume, 42);
   assert.ok(onDisk['guild-b'], 'the unrelated guild was lost by an update');
@@ -80,7 +80,7 @@ test('concurrent saves from one instance all survive', async () => {
     ['g1', 'g2', 'g3', 'g4'].map(guildId => store.save(guildId, snapshot(guildId))),
   );
 
-  const onDisk = JSON.parse(await readFile(file, 'utf8'));
+  const onDisk = JSON.parse(await readFile(file, 'utf8')).sessions ?? {};
   assert.deepEqual(Object.keys(onDisk).sort(), ['g1', 'g2', 'g3', 'g4']);
 });
 
@@ -118,7 +118,7 @@ test('concurrent writes from separate processes all survive', async () => {
 
   await Promise.all(['p1', 'p2', 'p3', 'p4', 'p5'].map(run));
 
-  const onDisk = JSON.parse(await readFile(file, 'utf8'));
+  const onDisk = JSON.parse(await readFile(file, 'utf8')).sessions ?? {};
   assert.deepEqual(
     Object.keys(onDisk).sort(),
     ['p1', 'p2', 'p3', 'p4', 'p5'],
