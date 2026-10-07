@@ -150,3 +150,36 @@ test('a managed child resolving a guild target never touches global', async () =
     Routes.applicationGuildCommands('client-1', 'guild-7'),
   ]);
 });
+
+test('a standalone process with no GUILD_ID still deploys global exactly once', async () => {
+  const { deployCommands } = await import('../src/utils/deploy-commands.js');
+  const { requests, restore } = recordPuts();
+
+  try {
+    await deployCommands(config, {});
+  } finally {
+    restore();
+  }
+
+  assert.equal(requests.filter(request => isGlobal(request.route)).length, 1,
+    'the standalone process did not deploy global exactly once');
+  assert.deepEqual(requests.filter(request => isGuild(request.route)), [],
+    'a standalone process with no GUILD_ID deployed a guild scope it was not configured for');
+});
+
+test('a standalone process with a GUILD_ID still deploys only that guild', async () => {
+  const { deployCommands } = await import('../src/utils/deploy-commands.js');
+  const { requests, restore } = recordPuts();
+
+  try {
+    await deployCommands({ ...config, guildId: 'guild-stand' }, {});
+  } finally {
+    restore();
+  }
+
+  assert.deepEqual(requests.map(request => request.route), [
+    Routes.applicationGuildCommands('client-1', 'guild-stand'),
+  ]);
+  assert.deepEqual(requests.filter(request => isGlobal(request.route)), [],
+    'the standalone GUILD_ID contract regressed into a global deploy');
+});

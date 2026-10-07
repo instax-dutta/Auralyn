@@ -190,7 +190,20 @@ const setupShoukakuEvents = () => {
   });
 };
 
-const shutdown = async (signal) => {
+let shutdownInFlight = null;
+
+const shutdown = (signal) => {
+  // Single flight. A signal and a typed manager message can arrive together,
+  // and `process.once` does not dedupe across the two channels. Running the
+  // teardown twice would flush the cache and destroy the client twice, and the
+  // first process.exit(0) would truncate the second's writes.
+  if (shutdownInFlight) return shutdownInFlight;
+
+  shutdownInFlight = runShutdown(signal);
+  return shutdownInFlight;
+};
+
+const runShutdown = async (signal) => {
   logger.warn(`Received ${signal}. Shutting down Auralyn (shard ${SHARD_TAG})...`);
 
   try {
@@ -289,3 +302,7 @@ if (isMainModule) {
 }
 
 export { client, shoukaku };
+
+/** Exported for tests: shutdown is idempotent, so the returned promise
+ * identity proves concurrent triggers collapse into one teardown. */
+export { shutdown };
