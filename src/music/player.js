@@ -43,6 +43,7 @@ export class MusicPlayer {
     this.telemetry = telemetry;
     this.queueManager = new QueueManager(logger.child('queue'));
     this.nowPlayingMessages = new Map();
+    this.persistStamps = new Map();
   }
 
   startNowPlayingRefresh(guildId, message) {
@@ -484,9 +485,49 @@ export class MusicPlayer {
     }, ms);
   }
 
+  async clearVoiceStatus(guildId, state) {
+    try {
+      const settings = await this.getGuildSettings(guildId);
+      if (!settings.vcStatusEnabled) return;
+      const voiceChannelId = state?.voiceChannel?.id;
+      const restClient = state?.voiceChannel?.client?.rest;
+      if (voiceChannelId && restClient) {
+        await restClient.put(`/channels/${voiceChannelId}/voice-status`, { body: { status: '' } });
+      }
+    } catch { /* ignore — 403 on free tier or no permission */ }
+  }
+
+  /**
+   * Recoverable disconnect: leaves the voice channel but keeps the queue and
+   * persists it, so a restart can restore it. This is what an empty voice
+   * channel and `/disconnect` use. It never records a tombstone.
+   */
+  async disconnect(guildId) {
+    this.stopNowPlayingRefresh(guildId);
+    this.clearSleepTimer(guildId);
+
+    const state = this.queueManager.getState(guildId);
+    await this.clearVoiceStatus(guildId, state);
+
+    // Capture the snapshot before tearing down transport, so the queue survives.
+    await this.persistGuildState(guildId);
+
+    this.cleanupGuild(guildId);
+    await this.shoukaku.leaveVoiceChannel(guildId);
+    this.queueManager.cleanup(guildId);
+  }
+
+  /**
+   * Destructive stop: clears the queue and records a tombstone so a restart does
+   * not restore it. This is what `/stop` uses.
+   *
+   * It must not route through `disconnect()`, which is recoverable and would
+   * re-persist the very session being cleared.
+   */
   async stop(guildId) {
     this.stopNowPlayingRefresh(guildId);
     this.clearSleepTimer(guildId);
+
     const state = this.queueManager.getState(guildId);
     state.queue = [];
     state.currentTrack = null;
@@ -502,31 +543,31 @@ export class MusicPlayer {
     }
 
     await this.clearVoiceStatus(guildId, state);
-    await this.disconnect(guildId);
-  }
 
-  async clearVoiceStatus(guildId, state) {
-    try {
-      const settings = await this.getGuildSettings(guildId);
-      if (!settings.vcStatusEnabled) return;
-      const voiceChannelId = state?.voiceChannel?.id;
-      const restClient = state?.voiceChannel?.client?.rest;
-      if (voiceChannelId && restClient) {
-        await restClient.put(`/channels/${voiceChannelId}/voice-status`, { body: { status: '' } });
-      }
-    } catch { /* ignore — 403 on free tier or no permission */ }
-  }
-
-  async disconnect(guildId) {
-    this.stopNowPlayingRefresh(guildId);
-    const state = this.queueManager.getState(guildId);
-    await this.clearVoiceStatus(guildId, state);
     this.cleanupGuild(guildId);
     await this.shoukaku.leaveVoiceChannel(guildId);
     this.queueManager.cleanup(guildId);
+
     if (this.sessionStore?.delete) {
       await this.sessionStore.delete(guildId);
     }
+  }
+
+  /**
+   * Recoverable shutdown: quiesces admission, flushes every live guild, and
+   * leaves the voice channel. Sessions stay restorable, so a redeploy resumes
+   * where it left off instead of starting empty.
+   */
+  async shutdown() {
+    this.shuttingDown = true;
+
+    const guildIds = [...this.queueManager.players.keys()];
+
+    await Promise.all(guildIds.map(guildId => this.disconnect(guildId).catch(error => {
+      this.logger.error(`Failed to disconnect guild ${guildId} during shutdown`, error);
+    })));
+
+    return { guilds: guildIds.length };
   }
 
   cleanupGuild(guildId) {
@@ -826,19 +867,37 @@ export class MusicPlayer {
     return this.settingsStore.get(guildId);
   }
 
+  /**
+   * Captures a session snapshot.
+   *
+   * `updatedAt` is a monotonic per-guild stamp, not a wall clock read. Two
+   * persists that race therefore still order correctly, and the store's
+   * staleness guard can never reject this guild's own newer write.
+   */
   async persistGuildState(guildId) {
     if (!this.sessionStore?.save) return;
 
     const state = this.queueManager.getState(guildId);
-    await this.sessionStore.save(guildId, {
-      guildId,
-      queue: state.queue,
-      currentTrack: state.currentTrack,
-      volume: state.volume,
-      loopMode: state.loopMode,
-      textChannelId: state.textChannel?.id ?? null,
-      voiceChannelId: state.voiceChannel?.id ?? null,
-      updatedAt: new Date().toISOString(),
-    });
+    const last = this.persistStamps.get(guildId) ?? 0;
+    const now = Math.max(Date.now(), last + 1);
+    this.persistStamps.set(guildId, now);
+
+    try {
+      await this.sessionStore.save(guildId, {
+        guildId,
+        queue: state.queue,
+        currentTrack: state.currentTrack,
+        volume: state.volume,
+        loopMode: state.loopMode,
+        textChannelId: state.textChannel?.id ?? null,
+        voiceChannelId: state.voiceChannel?.id ?? null,
+        updatedAt: new Date(now).toISOString(),
+      });
+    } catch (error) {
+      // A stale rejection means another writer already holds a newer view; it
+      // must not surface as an unhandled rejection from a fire-and-forget call.
+      if (error?.name !== 'StaleRevisionError') throw error;
+      this.logger.debug(`Skipped a stale session write for guild ${guildId}`);
+    }
   }
 }
