@@ -135,18 +135,18 @@ Tests: `test/shard-manager.test.js`, `test/shard-shutdown.test.js`
 
 - [ ] `typed shutdown protocol` — GREEN guard: `{ op: 'graceful_shutdown' }` is
       the single shutdown message; unknown messages are ignored.
-- [ ] `no force kill` — RED: `src/shard.js:117` calls `shard.kill()` after the
+- [x] `no force kill` — RED: `src/shard.js:117` calls `shard.kill()` after the
       child disconnects, so a healthy child is killed instead of exiting on its
       own. GREEN: the manager waits for the child's exit.
-- [ ] `timeout does not kill` — RED: a hung child is killed at the timeout.
+- [x] `timeout does not kill` — RED: a hung child is killed at the timeout.
       GREEN: timeout records a bounded error and leaves the child to exit itself.
 - [ ] `shutdown is single flight` — GREEN guard: `isShuttingDown` is already set
       synchronously at `shard.js:108-109`, so concurrent triggers already return
       early; this locks the behaviour in.
-- [ ] `manager timers are disposed` — RED: the health, status, and shutdown-timeout
+- [x] `manager timers are disposed` — RED: the health, status, and shutdown-timeout
       timers in `src/shard.js` are never cleared, so the process cannot exit
       cleanly. GREEN: all three are disposed on both the success and timeout paths.
-- [ ] `import does not spawn` — RED: `src/shard.js:143-144` constructs the manager
+- [x] `import does not spawn` — RED: `src/shard.js:143-144` constructs the manager
       and spawns at module scope, so the file cannot be imported by a test. GREEN:
       bootstrap moves behind an `isMainModule` guard and the manager lives in
       `src/shard-manager.js`.

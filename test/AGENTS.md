@@ -46,6 +46,8 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `session-lifecycle.test.js` — disconnect vs stop vs shutdown semantics
   - `session-restore.test.js` — restart hydration, tombstone skip, Lavalink reattach
   - `deployment-ownership.test.js` — manager owns global scope, GUILD_ID never changes ownership
+  - `shard-manager.test.js` — no force-kill, timeout reporting, timer disposal, driven from a child
+  - `shard-import.test.js` — importing the shard entrypoint has no side effects
 
 ## TDD Gate
 
