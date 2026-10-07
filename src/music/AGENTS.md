@@ -25,7 +25,6 @@ The Shoukaku/Lavalink wrapper that owns playback, per-guild queues, and track re
 - Channels are persisted as ids and resolved from `client.channels.cache` at restore time. A channel that no longer exists must not discard the restored queue.
 - `persistGuildState()` stamps `updatedAt` from a monotonic per-guild counter, never a wall clock, so racing persists stay ordered. It swallows `StaleRevisionError` at debug level because fire-and-forget callers cannot handle it.
 
-
 - External code (commands, events) interacts only through `client.musicPlayer` and the re-exports of `music/index.js`; no other module touches Shoukaku players directly.
 - Players are keyed by guildId; `disconnect(guildId)` is the shutdown path used by `src/index.js`.
 - Resolution honors per-guild `sourcePriority` from guild settings; fallback chain must never fail hard when Spotify resolution fails.
@@ -47,6 +46,8 @@ The Shoukaku/Lavalink wrapper that owns playback, per-guild queues, and track re
 - `test/music-player.test.js` — player lifecycle/queue behavior with stubbed Shoukaku
 - `test/autoplay.test.js` — autoplay behavior
 - `test/track-scoring.test.js` — best-match ranking
+- `test/persist-failure-resilience.test.js` — a read-only data directory must not crash the player; failures log once per outage, not per event. This is the regression guard for the `void` call sites.
+- `test/timer-ownership.test.js` — every timer the player starts is released by `dispose()`
 - All run via `npm test`.
 
 ## Child DOX Index

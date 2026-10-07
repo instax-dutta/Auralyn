@@ -15,7 +15,7 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
 - ESM: import implementation modules directly from `src/`.
 - Hermetic: no Discord or Lavalink network calls; Shoukaku/client are stubbed or mocked (see `music-player.test.js`).
 - `npm test` is bare `node --test`, which discovers and runs EVERY `.js` file under `test/`, including `test/helpers/`. Every helper must therefore be inert when executed as a top-level script: export its entrypoint and do nothing unless invoked.
-- `test/helpers/` doubles: `discord-interaction.js` (reply/defer/edit/update lifecycle) and `shard-child.js` (forked bootstrap that imports `src/index.js` without calling `main()`).
+- `test/helpers/` doubles: `discord-interaction.js` (reply/defer/edit/update lifecycle), `shard-child.js` (forked bootstrap that imports `src/index.js` without calling `main()`), `shard-manager-child.js` (drives `HyperscaleShardManager` shutdown and writes a report because a correct shutdown may call `process.exit`), `storage-child.js` (separate process for cross-process contention), and `shutdown-single-flight.js` (proves two concurrent shutdown triggers return the same promise).
 - Suite map:
   - `commands-load.test.js` — every `src/commands` file exports `data` + `execute` and registers under `data.name`
   - `deploy-commands.test.js` — command payload building for registration
@@ -36,7 +36,7 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `commands-forcefix.test.js` — order-preserving restore and playback resume
   - `shard-ipc.test.js` — forks `test/helpers/shard-child.js`, asserts typed shutdown exits 0
   - `test/helpers/shutdown-single-flight.js` — forked helper proving two concurrent shutdown triggers return the same promise
-    - Every helper must be inert when run directly: `node --test` executes all of `test/`. Gate on `typeof process.send === 'function'`.
+    - Every helper must be inert when run directly: `node --test` executes all of `test/`. Gate on `typeof process.send === 'function'` and fork the helper rather than exec'ing it, so the gate is the thing that distinguishes the two modes.
   - `storage-primitives.test.js` — atomic replacement, read-back, corrupt-file quarantine
   - `storage-lock.test.js` — lock release, dead/abandoned-owner reclamation, heartbeat
   - `storage-contention.test.js` — cross-instance and cross-process writes
@@ -56,7 +56,9 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `voice-empty-channel.test.js` — `voiceStateUpdate.js` disconnects (not stops) on an empty channel, across all five branches
   - `is-main-module.test.js` — the entrypoint guard resolves correctly, including paths containing `#` and `%` that break naive URL concatenation
   - `persist-failure-resilience.test.js` — a read-only data directory must not crash the player; failures are logged once per outage, not per event
-  - `lavalink-plugin-versions.test.js` — the Dockerfile pins a youtube-plugin that can resolve audio, and the download URLs interpolate the ARG
+  - `lavalink-plugin-versions.test.js` — the Dockerfile pin and the `application.yml` dependency agree, no literal versions in download URLs, and no test claims a version is known good
+  - `startup-data-dir.test.js` — drives `scripts/start.sh` with stubbed `node`/`java`/`curl`: data-directory resolution, an explicit `DATA_DIR` is never overridden, an unwritable fallback exits 78, and `java` gets a writable `-Djava.io.tmpdir`
+  - `is-main-module.test.js` — the entrypoint guard resolves correctly, including paths containing `#` and `%` that break naive URL concatenation
 
 ## TDD Gate
 

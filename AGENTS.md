@@ -9,9 +9,9 @@
 - Entrypoints: `src/index.js` (single process) and `src/shard.js` (ShardingManager launcher). In the container, `scripts/start.sh` supervises Lavalink + bot.
 - One-container deployment: Dockerfile + docker-compose.yml bundle the bot, Java runtime, and `lavalink/Lavalink.jar`.
 - Config is 100% environment-driven through `src/config.js` (see `src/AGENTS.md`). Required vars: `DISCORD_TOKEN`, `CLIENT_ID`, `LAVALINK_PASSWORD`.
-- Persisted runtime state lives under `/app/data` (guild settings, sessions, playlists, liked tracks, Spotify→YT cache).
-- Knowledge graph at `graphify-out/`: for codebase questions, use `graphify query/path/explain` first; after modifying code, run `graphify update .` (AST-only).
-- Existing planning/audit docs are root-owned reference material: `IMPLEMENTATION_PLAN.md`, `PHASE3.md`, `SHARDING.md`, `TEST_PLAN_PHASES_1-4.md`, `CODEBASE_AUDIT.md`, `technical-foundation.md`, `audit_raw.json`.
+- Persisted runtime state lives under a directory resolved at startup (guild settings, sessions, playlists, liked tracks, Spotify→YT cache). The application default is `DATA_DIR=/app/data`, but `scripts/start.sh` resolves a *writable* directory first, because Pterodactyl runs containers with a read-only rootfs where `/app/data` cannot be written. Always go through `utils/data-dir.js`; never assume `/app/data`.
+- Knowledge graph at `graphify-out/`: for codebase questions, use `graphify query/path/explain` first; after modifying code, run `graphify update .` (AST-only). `graphify-out/` is generated and gitignored. **Caveat:** `graphify` is not installed in this environment, so the graph is stale and this step currently cannot be performed — say so rather than claiming the graph is current.
+- Planning and audit docs are root-owned reference material: `IMPLEMENTATION_PLAN.md`, `PHASE3.md`, `SHARDING.md`, `TEST_PLAN_PHASES_1-4.md`, `CODEBASE_AUDIT.md`, `technical-foundation.md`, plus `docs/superpowers/` (approved spec and plans). All are tracked; a clone missing any of them has dangling references.
 
 ## Core Contract
 
@@ -86,7 +86,12 @@ Default section order:
 
 ## User Preferences
 
-When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md. Current known global preference: keep the knowledge graph current by running `graphify update .` after code changes (see CLAUDE.md).
+When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md.
+
+Current known global preferences:
+
+- Keep the knowledge graph current by running `graphify update .` after code changes. The tool is currently unavailable here, so this preference cannot be satisfied; when it cannot be, record that in the relevant handoff rather than implying the graph is fresh.
+- Report a limitation as measured, not as inferred. A conclusion drawn from a warning, a filename, or a version announcement is not a verified result. Verify against the running system, or say plainly that it is unverified.
 
 ## Child DOX Index
 
@@ -102,4 +107,6 @@ Direct children (each owns its subtree):
 - `lavalink/AGENTS.md` — bundled Lavalink v4 server (jar, application.yml, its own start.sh)
 - `egg/AGENTS.md` — Pterodactyl egg packaging for hosted deploys
 
-Root-owned (no child doc): `README.md`, `CLAUDE.md`, `package.json`, `package-lock.json`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.gitignore`, `.env.example`, `.env.docker`, `.github/workflows/docker-publish.yml`, `graphify-out/`, and the root-level planning/audit docs and loose artifacts.
+Root-owned (no child doc): `README.md`, `CLAUDE.md`, `package.json`, `package-lock.json`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.gitignore`, `.env.example`, `.env.docker`, `.github/workflows/docker-publish.yml`, `graphify-out/` (generated, gitignored), and the root-level planning/audit docs (`IMPLEMENTATION_PLAN.md`, `PHASE3.md`, `SHARDING.md`, `TEST_PLAN_PHASES_1-4.md`, `CODEBASE_AUDIT.md`, `technical-foundation.md`).
+
+Also root-owned: `docs/playback-canary.md` and `docs/superpowers/` (the approved spec and its plans). These are tracked in git and cited by other tracked docs, so a fresh clone must contain them. `audit_raw.json` is a superseded ~900KB raw session transcript, deliberately untracked.
