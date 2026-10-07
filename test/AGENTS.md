@@ -35,6 +35,8 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `commands-playnext.test.js` — `enqueueFront` options contract, idle start, requester metadata
   - `commands-forcefix.test.js` — order-preserving restore and playback resume
   - `shard-ipc.test.js` — forks `test/helpers/shard-child.js`, asserts typed shutdown exits 0
+  - `test/helpers/shutdown-single-flight.js` — forked helper proving two concurrent shutdown triggers return the same promise
+    - Every helper must be inert when run directly: `node --test` executes all of `test/`. Gate on `typeof process.send === 'function'`.
   - `storage-primitives.test.js` — atomic replacement, read-back, corrupt-file quarantine
   - `storage-lock.test.js` — lock release, dead/abandoned-owner reclamation, heartbeat
   - `storage-contention.test.js` — cross-instance and cross-process writes
@@ -48,6 +50,10 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `deployment-ownership.test.js` — manager owns global scope, GUILD_ID never changes ownership
   - `shard-manager.test.js` — no force-kill, timeout reporting, timer disposal, driven from a child
   - `shard-import.test.js` — importing the shard entrypoint has no side effects
+  - `user-store-persistence.test.js` — playlist/liked stores are atomic, per-user isolated, and safe against concurrent instances; each case runs in a child process because `data-dir.js` reads `DATA_DIR` at import time
+  - `cache-persistence.test.js` — Spotify→YT cache merges under the lock, quarantines corruption, keeps expired entries off disk, and owns its debounce timer
+  - `timer-ownership.test.js` — every registry timer is released by `dispose()`; asserts a disposed callback stops firing, because unref'd timers are invisible to `process.getActiveResourcesInfo()`
+  - `voice-empty-channel.test.js` — `voiceStateUpdate.js` disconnects (not stops) on an empty channel, across all five branches
 
 ## TDD Gate
 
@@ -56,6 +62,8 @@ Every production change follows the spec gate: write a behavioral RED that drive
 ## Work Guidance
 
 - Any new `src/` behavior gets a matching `.test.js` here.
+- When a test fakes a discord.js collection (e.g. `channel.members`), use a real `Collection`, not a `Map`: the production code calls `.filter(...).size`, which a bare `Map` does not provide.
+- When a RED fails on a fixture error (`x.filter is not a function`) or an assertion about a scenario the handler was never asked about, fix the fixture first and re-confirm the RED names the real defect.
 - Keep tests fast and offline; never add network-dependent fixtures.
 
 ## Verification

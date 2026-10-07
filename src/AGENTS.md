@@ -25,6 +25,7 @@ Auralyn's bot process: entrypoints, environment config, wiring of commands/event
 - The `process.on('message')` listener is registered only when `typeof process.send === 'function'`, i.e. only in a genuinely forked child. A normal import of `src/index.js` must attach no IPC listener; otherwise importing it in a test or tool captures process messages.
 - Guild command sync is rate-limited (`guildSyncLimiter`: 3s window, burst 3) to stay inside Discord API limits.
 - Singletons attached to client: `logger`, `config`, `telemetry`, `settingsStore`, `sessionStore`, `playlistStore`, `likedStore`, `musicPlayer`, `shardInfo`.
+- `client.timerRegistry` is created by the `ready` handler and holds the timers it starts (e.g. the presence interval). `shutdown()` disposes it so no handler timer outlives the client.
 
 ## Work Guidance
 

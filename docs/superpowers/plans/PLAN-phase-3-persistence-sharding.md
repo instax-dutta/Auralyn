@@ -124,7 +124,7 @@ Tests: `test/deployment-ownership.test.js`
       `getCommandDeploymentTargets()` branches only on `config.guildId`, so a
       managed child with `GUILD_ID` unset still targets global. GREEN: ownership
       is decided by runtime role, not by `GUILD_ID`.
-- [ ] `standalone behaviour unchanged` — GREEN guard: a single process still
+- [x] `standalone behaviour unchanged` — GREEN guard: a single process still
       deploys global exactly once and its own guild.
 
 ## Task 5 — Graceful shard shutdown without force-kill
@@ -133,14 +133,14 @@ Modify: `src/shard.js`, `src/index.js`
 New: `src/utils/shard-protocol.js`, `src/shard-manager.js`
 Tests: `test/shard-manager.test.js`, `test/shard-shutdown.test.js`
 
-- [ ] `typed shutdown protocol` — GREEN guard: `{ op: 'graceful_shutdown' }` is
+- [x] `typed shutdown protocol` — GREEN guard: `{ op: 'graceful_shutdown' }` is
       the single shutdown message; unknown messages are ignored.
 - [x] `no force kill` — RED: `src/shard.js:117` calls `shard.kill()` after the
       child disconnects, so a healthy child is killed instead of exiting on its
       own. GREEN: the manager waits for the child's exit.
 - [x] `timeout does not kill` — RED: a hung child is killed at the timeout.
       GREEN: timeout records a bounded error and leaves the child to exit itself.
-- [ ] `shutdown is single flight` — GREEN guard: `isShuttingDown` is already set
+- [x] `shutdown is single flight` — GREEN guard: `isShuttingDown` is already set
       synchronously at `shard.js:108-109`, so concurrent triggers already return
       early; this locks the behaviour in.
 - [x] `manager timers are disposed` — RED: the health, status, and shutdown-timeout
@@ -156,14 +156,14 @@ Tests: `test/shard-manager.test.js`, `test/shard-shutdown.test.js`
 Modify: `src/utils/playlist-store.js`, `src/utils/liked-store.js`, `src/utils/spotify-yt-cache.js`
 Tests: `test/user-store-persistence.test.js`, `test/cache-persistence.test.js`
 
-- [ ] `atomic user store writes` — RED: `playlist-store.js:50` and
+- [x] `atomic user store writes` — RED: `playlist-store.js:50` and
       `liked-store.js:47` use bare `writeFile`, so an interrupted write truncates a
       user's playlist. GREEN: both use the Task 1 primitive.
-- [ ] `cross-user isolation` — GREEN guard: one user can never read another's file.
-- [ ] `cache merge under lock` — RED: `spotify-yt-cache.js:100` writes the whole
+- [x] `cross-user isolation` — GREEN guard: one user can never read another's file.
+- [x] `cache merge under lock` — RED: `spotify-yt-cache.js:100` writes the whole
       in-memory cache, so two processes each lose the other's entries. GREEN: the
       canonical cache is re-read and merged under the lock before writing.
-- [ ] `cache corruption quarantined` — RED: `spotify-yt-cache.js:47` swallows a
+- [x] `cache corruption quarantined` — RED: `spotify-yt-cache.js:47` swallows a
       corrupt cache with a warn, so entries are lost silently. GREEN: quarantine
       and start empty.
 
@@ -172,7 +172,7 @@ Tests: `test/user-store-persistence.test.js`, `test/cache-persistence.test.js`
 Modify: `src/events/ready.js`, `src/music/player.js`
 Tests: `test/timer-ownership.test.js`
 
-- [ ] `no unowned timers` — RED: `src/events/ready.js:23` and the refresh/sleep
+- [x] `no unowned timers` — RED: `src/events/ready.js:23` and the refresh/sleep
       timers in `src/music/player.js` are bare native timers, so the process is
       held open and they cannot be cancelled. GREEN: every Phase 3 timer is
       registered and disposable.

@@ -15,7 +15,8 @@ Handlers for Discord gateway events (`ready`, `interactionCreate`, `voiceStateUp
 - The four user-scoped families (`playlist-page`, `liked-page`, `liked-clear`, `voteskip`) carry a user id instead of a guild id and must be exempt from the guild-ownership gate.
 - Always reply (never `deferUpdate`) when rejecting a cross-guild or cross-user control; the caller has not been deferred.
 - `voiceStateUpdate` calls `MusicPlayer.disconnect()` when a channel empties, never `stop()`. An empty channel is a recoverable departure and must not destroy the queue.
-- `ready.js` restores sessions into logical state only; connecting to voice is the separate Lavalink-ready step. Background intervals it starts must be `unref()`ed so they never hold the process open.
+- `ready.js` restores sessions into logical state only; connecting to voice is the separate Lavalink-ready step. Background intervals it starts must be registered with a `TimerRegistry` published as `client.timerRegistry`, which unrefs them and lets shutdown cancel them. A bare `unref()`ed interval cannot be cancelled.
+- `voiceStateUpdate.js` calls `MusicPlayer.disconnect()`, never `stop()`, when the bot's channel empties. `stop()` is the destructive operation: it clears the queue and the persisted session, so returning listeners would find nothing queued. Verified by `test/voice-empty-channel.test.js`.
 
 
 - Default export: `{ name, once?, async execute(...args, client, shoukaku) }`.
@@ -30,7 +31,7 @@ Handlers for Discord gateway events (`ready`, `interactionCreate`, `voiceStateUp
 
 ## Verification
 
-- No dedicated unit suite; covered indirectly by boot (`npm test` still must pass) and by `src/index.js` loaders throwing on malformed event modules.
+- `test/voice-empty-channel.test.js` drives the real gateway event shape and pins all five branches of `voiceStateUpdate.js`. Otherwise covered indirectly by boot (`npm test` still must pass) and by `src/index.js` loaders throwing on malformed event modules.
 
 ## Child DOX Index
 

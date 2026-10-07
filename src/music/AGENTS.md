@@ -37,6 +37,8 @@ The Shoukaku/Lavalink wrapper that owns playback, per-guild queues, and track re
 - New music modules should be re-exported through `music/index.js` so the public surface stays explicit.
 - Keep scoring/ranking logic deterministic so it can be unit-tested.
 
+- Every timer `MusicPlayer` starts (now-playing refresh re-arms, sleep timer) is registered with `this.timers`, a `TimerRegistry` from `utils/timer-registry.js`. Never add a bare `setTimeout` here: the refresh chain re-arms itself from its own callback, so an untracked timer cannot be stopped once its guild state is gone. `shutdown()` disposes the registry and returns `timersReleased`.
+
 ## Verification
 
 - `test/music-player.test.js` — player lifecycle/queue behavior with stubbed Shoukaku
