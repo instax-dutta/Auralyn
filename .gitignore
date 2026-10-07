@@ -14,3 +14,20 @@ TECH-DOC.md
 IMPLEMENTATION_PLAN.md
 PHASE3.md
 PHASE*.md
+# Local agent tooling state (per-machine, never shared)
+.claude/
+.mimocode/
+
+# Generated knowledge-graph output. Rebuilt by `graphify update .`; the tracked
+# contract is the code, not the cache.
+graphify-out/
+
+# Ad-hoc log snippets pasted while debugging. Not project source; kept locally.
+# audit_raw.json is an ~900KB raw agent session transcript, also kept locally.
+# Delete these freely - nothing depends on them.
+3560kdx.txt
+r1161nr.txt
+message.txt
+message (*).txt
+message*.txt
+audit_raw.json
