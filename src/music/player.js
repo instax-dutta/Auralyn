@@ -28,6 +28,11 @@ function isFilterPayloadMeaningful(filters) {
   return false;
 }
 
+function resolveChannel(client, channelId) {
+  if (!client || !channelId) return null;
+  return client.channels?.cache?.get(channelId) ?? null;
+}
+
 export class MusicPlayer {
   constructor(shoukaku, logger = createSilentLogger(), {
     settingsStore = null,
@@ -44,6 +49,7 @@ export class MusicPlayer {
     this.queueManager = new QueueManager(logger.child('queue'));
     this.nowPlayingMessages = new Map();
     this.persistStamps = new Map();
+    this.restorableGuilds = new Set();
   }
 
   startNowPlayingRefresh(guildId, message) {
@@ -874,6 +880,91 @@ export class MusicPlayer {
    * persists that race therefore still order correctly, and the store's
    * staleness guard can never reject this guild's own newer write.
    */
+  /**
+   * Hydrates persisted sessions into logical player state without touching
+   * voice. This runs when the client is ready, before Lavalink is guaranteed to
+   * be connected, so a guild that was playing before a restart is marked
+   * restorable rather than connected.
+   *
+   * Guilds whose last outcome was a destructive stop are skipped, because a
+   * tombstone is exactly the record that they should not come back.
+   */
+  async restoreSessions({ client } = {}) {
+    if (!this.sessionStore?.getAll) return [];
+
+    const all = await this.sessionStore.getAll();
+    const restored = [];
+
+    for (const [guildId, snapshot] of Object.entries(all)) {
+      if (!snapshot) continue;
+
+      if (await this.sessionStore.wasStopped?.(guildId)) {
+        this.logger.debug(`Skipping restore for stopped guild ${guildId}`);
+        continue;
+      }
+
+      const state = this.queueManager.getState(guildId);
+      state.queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
+      state.currentTrack = snapshot.currentTrack ?? null;
+      state.isPlaying = false;
+      state.isPaused = false;
+      state.restored = true;
+
+      if (typeof snapshot.volume === 'number') state.volume = snapshot.volume;
+      if (typeof snapshot.loopMode === 'number') state.loopMode = snapshot.loopMode;
+
+      // Channels are stored as ids, so resolve them against the live caches.
+      // A channel that no longer exists must not cost us the restored queue.
+      state.textChannel = resolveChannel(client, snapshot.textChannelId);
+      state.voiceChannel = resolveChannel(client, snapshot.voiceChannelId);
+
+      restored.push(guildId);
+    }
+
+    this.restorableGuilds = new Set(restored);
+
+    if (restored.length > 0) {
+      this.logger.info(`Restored ${restored.length} session(s) from disk`);
+    }
+
+    return restored;
+  }
+
+  /**
+   * Reconnects every restorable guild that has something to play. Called once
+   * Lavalink reports ready, since playback cannot resume before then.
+   */
+  async reattachRestored() {
+    const attached = [];
+
+    for (const guildId of this.restorableGuilds ?? []) {
+      const state = this.queueManager.getState(guildId);
+      if (!state.currentTrack || !state.voiceChannel) continue;
+
+      try {
+        await this.join(guildId, state.voiceChannel, state.textChannel);
+
+        // Resume the track that was playing rather than advancing to the next
+        // one: `playNext` shifts from the queue, which would skip the restored
+        // current track entirely.
+        const player = await this.getOrCreateLavalinkPlayer(guildId);
+        await player.playTrack({ track: { encoded: state.currentTrack.encoded } });
+        state.isPlaying = true;
+        this.telemetry?.trackTrackPlayed();
+
+        attached.push(guildId);
+      } catch (error) {
+        this.logger.error(`Failed to reattach guild ${guildId}`, error);
+      }
+    }
+
+    if (attached.length > 0) {
+      this.logger.info(`Reattached ${attached.length} restored session(s)`);
+    }
+
+    return attached;
+  }
+
   async persistGuildState(guildId) {
     if (!this.sessionStore?.save) return;
 

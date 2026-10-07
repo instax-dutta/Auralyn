@@ -20,6 +20,14 @@ export default {
     };
 
     await updatePresence();
-    setInterval(updatePresence, 30 * 60 * 1000);
+
+    // A background presence refresh must never hold the process open on its
+    // own; only real work should keep the event loop alive.
+    const presenceTimer = setInterval(updatePresence, 30 * 60 * 1000);
+    presenceTimer.unref?.();
+
+    // Hydrate persisted sessions into logical state. This does not connect to
+    // voice: reattaching waits for Lavalink, which happens separately.
+    await client.musicPlayer?.restoreSessions?.({ client });
   },
 };

@@ -165,9 +165,19 @@ const loadEvents = async () => {
 };
 
 const setupShoukakuEvents = () => {
-  shoukaku.on('ready', (name, resumed) => {
+  let reattached = false;
+  shoukaku.on('ready', async (name, resumed) => {
     if (resumed) client.telemetry?.trackReconnect();
     logger.info(`Lavalink node ${name} ready${resumed ? ' (resumed)' : ''}`);
+
+    // Sessions restored at client-ready can only resume now that Lavalink is
+    // connected. Only the first node to come up reattaches.
+    if (client.musicPlayer?.reattachRestored && !reattached) {
+      reattached = true;
+      await client.musicPlayer.reattachRestored().catch(error => {
+        logger.error('Failed to reattach restored sessions', error);
+      });
+    }
   });
   shoukaku.on('error', (name, error) => {
     logger.error(`Lavalink node ${name} error`, error);
