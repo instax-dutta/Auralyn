@@ -58,7 +58,13 @@ export default {
           AuralynColors.info,
         )).catch(() => {});
       }
-      await client.musicPlayer.stop(guild.id);
+
+      // An empty channel is a recoverable departure, not a teardown. Calling
+      // stop() here destroyed the queue and cleared the persisted session, so
+      // the next listener found nothing queued and every queue silently
+      // vanished when the last human left. disconnect() leaves the queue and
+      // session intact for an immediate rejoin or a 24/7 return to channel.
+      await client.musicPlayer.disconnect(guild.id);
     } catch (err) {
       client.logger.error(`Error disconnecting from empty voice channel in guild ${guild.id}`, err);
     }
