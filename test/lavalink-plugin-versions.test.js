@@ -86,3 +86,52 @@ test('the download command interpolates the pinned ARG, not a literal version', 
       `a literal "${pinned}" appears in the Dockerfile, so the ARG is not the single source of truth`);
   }
 });
+/**
+ * The plugin version was declared in two places: the Dockerfile ARG that names
+ * the downloaded jar, and the `plugins:` dependency list in application.yml.
+ * They drifted apart and took the whole server down:
+ *
+ *   java.lang.RuntimeException: Failed to delete ./plugins/youtube-plugin-1.18.2.jar
+ *     at lavalink.server.bootstrap.PluginManager.manageDownloads(PluginManager.kt:79)
+ *
+ * Lavalink compares the declared dependency against the jar it finds on disk. On
+ * a mismatch it deletes the jar and downloads the declared one, and under a
+ * read-only rootfs that delete throws from the PluginManager constructor, so
+ * Spring never starts and the bot never boots.
+ */
+const applicationYml = await readFile(path.join(REPO, 'lavalink', 'application.yml'), 'utf8');
+
+test('every declared Lavalink plugin dependency matches the jar shipped in the image', () => {
+  const declared = [...applicationYml.matchAll(/- dependency: "([^"]+)"/g)].map(match => match[1]);
+
+  assert.ok(declared.length > 0, 'no plugin dependencies found in application.yml');
+
+  for (const coordinate of declared) {
+    const [artifact, version] = coordinate.split(':').slice(-2);
+    const jarName = `${artifact.split('.').pop()}-${version}.jar`;
+
+    // The jar the Dockerfile downloads must be exactly the one Lavalink expects.
+    const dockerfilePinsJar = dockerfile.includes(`/${artifact.split(':').pop()}/`)
+      || dockerfile.includes(`${coordinate.split(':')[0]}`);
+    assert.ok(dockerfilePinsJar, `the Dockerfile does not appear to ship ${jarName}`);
+
+    assert.match(dockerfile, new RegExp(`\\$\\{YOUTUBE_PLUGIN_VERSION\\}|\\$\\{LAVASRC_PLUGIN_VERSION\\}`),
+      'the Dockerfile no longer pins plugin versions via ARG');
+
+    // And the shipped jar name must line up with the declared version.
+    const pinnedByDockerfile = coordinate.includes('youtube-plugin')
+      ? pinnedArg('YOUTUBE_PLUGIN_VERSION')
+      : pinnedArg('LAVASRC_PLUGIN_VERSION');
+
+    assert.equal(pinnedByDockerfile, version,
+      `version drift: application.yml declares ${coordinate} but the image ships ${pinnedByDockerfile}. `
+      + 'Lavalink will try to delete the shipped jar, which fails on a read-only rootfs.');
+  }
+});
+
+test('the youtube plugin jar name is not hardcoded in application.yml', () => {
+  // A literal jar filename in the dependency list is how the two sources of truth
+  // drift apart again on the next bump.
+  assert.equal(/youtube-plugin-\d/.test(applicationYml), false,
+    'application.yml hardcodes a plugin jar filename');
+});
