@@ -211,6 +211,10 @@ const shutdown = async (signal) => {
       logger.warn(`Failed to flush Spotify→YT cache: ${error.message}`);
     });
 
+    // Release timers started by handlers (e.g. the ready presence interval)
+    // before the client is destroyed.
+    client.timerRegistry?.dispose();
+
     logger.info('Destroying Discord client...');
     await client.destroy();
     logger.info('Shutdown complete');

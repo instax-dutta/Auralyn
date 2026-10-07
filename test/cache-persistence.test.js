@@ -152,3 +152,23 @@ test('flush cancels the debounce timer instead of writing twice', async () => {
   await cache.flush();
   assert.equal(cache.persistTimer, null, 'flush left the debounce timer armed');
 });
+
+test('the debounce timer is owned and released by dispose', async () => {
+  const dir = await tempDir();
+  const file = path.join(dir, 'cache.json');
+
+  const cache = createCache(file, { persistDebounceMs: 10_000 });
+  await cache.load();
+  cache.set('k', { id: 1 });
+
+  assert.equal(cache.timers.size, 1, 'the debounce timer was not registered');
+
+  const released = cache.dispose();
+
+  assert.equal(released, 1, 'dispose did not release the debounce timer');
+  assert.equal(cache.timers.size, 0);
+
+  // A disposed cache must not arm another write.
+  cache.set('later', { id: 2 });
+  assert.equal(cache.timers.size, 0, 'a disposed cache armed a new timer');
+});

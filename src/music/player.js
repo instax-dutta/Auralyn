@@ -1,5 +1,6 @@
 import { LoadType } from 'shoukaku';
 import { createSilentLogger } from '../utils/logger.js';
+import { TimerRegistry } from '../utils/timer-registry.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { QueueManager, LOOP_TRACK } from './queue.js';
 import { FILTER_PRESETS, DEFAULT_FILTER, PRESET_LAYER } from '../utils/audio-filters.js';
@@ -50,6 +51,9 @@ export class MusicPlayer {
     this.nowPlayingMessages = new Map();
     this.persistStamps = new Map();
     this.restorableGuilds = new Set();
+    // Every timer this player starts is registered so shutdown can release the
+    // ones no guild ever cleared.
+    this.timers = new TimerRegistry();
   }
 
   startNowPlayingRefresh(guildId, message) {
@@ -70,8 +74,8 @@ export class MusicPlayer {
       if (state.isPaused) {
         const entry = this.nowPlayingMessages.get(guildId);
         if (entry) {
-          clearTimeout(entry.timer);
-          entry.timer = setTimeout(tick, currentInterval);
+          this.timers.clear(entry.timer);
+          entry.timer = this.timers.setTimeout(tick, currentInterval);
         }
         return;
       }
@@ -91,8 +95,8 @@ export class MusicPlayer {
       if (payloadKey === lastPayloadKey) {
         const entry = this.nowPlayingMessages.get(guildId);
         if (entry) {
-          clearTimeout(entry.timer);
-          entry.timer = setTimeout(tick, currentInterval);
+          this.timers.clear(entry.timer);
+          entry.timer = this.timers.setTimeout(tick, currentInterval);
         }
         return;
       }
@@ -116,17 +120,17 @@ export class MusicPlayer {
       }
       const entry = this.nowPlayingMessages.get(guildId);
       if (entry) {
-        clearTimeout(entry.timer);
-        entry.timer = setTimeout(tick, currentInterval);
+        this.timers.clear(entry.timer);
+        entry.timer = this.timers.setTimeout(tick, currentInterval);
       }
     };
-    this.nowPlayingMessages.set(guildId, { message, timer: setTimeout(tick, currentInterval) });
+    this.nowPlayingMessages.set(guildId, { message, timer: this.timers.setTimeout(tick, currentInterval) });
   }
 
   stopNowPlayingRefresh(guildId) {
     const entry = this.nowPlayingMessages.get(guildId);
     if (entry) {
-      clearTimeout(entry.timer);
+      this.timers.clear(entry.timer);
       this.nowPlayingMessages.delete(guildId);
     }
   }
@@ -478,7 +482,7 @@ export class MusicPlayer {
   clearSleepTimer(guildId) {
     const state = this.queueManager.getState(guildId);
     if (state.sleepTimer) {
-      clearTimeout(state.sleepTimer);
+      this.timers.clear(state.sleepTimer);
       state.sleepTimer = null;
     }
   }
@@ -486,7 +490,7 @@ export class MusicPlayer {
   setSleepTimer(guildId, ms) {
     this.clearSleepTimer(guildId);
     const state = this.queueManager.getState(guildId);
-    state.sleepTimer = setTimeout(() => {
+    state.sleepTimer = this.timers.setTimeout(() => {
       this.stop(guildId).catch(() => {});
     }, ms);
   }
@@ -573,7 +577,10 @@ export class MusicPlayer {
       this.logger.error(`Failed to disconnect guild ${guildId} during shutdown`, error);
     })));
 
-    return { guilds: guildIds.length };
+    this.nowPlayingMessages.clear();
+    const released = this.timers.dispose();
+
+    return { guilds: guildIds.length, timersReleased: released };
   }
 
   cleanupGuild(guildId) {

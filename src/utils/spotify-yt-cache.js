@@ -1,4 +1,5 @@
 import { dataPath } from './data-dir.js';
+import { TimerRegistry } from './timer-registry.js';
 import { writeJsonAtomic, readJsonWithQuarantine } from './atomic-json.js';
 import { withFileLock } from './storage-lock.js';
 
@@ -27,6 +28,7 @@ export class SpotifyYtCache {
     this.cache = new Map();
     this.dirty = false;
     this.persistTimer = null;
+    this.timers = new TimerRegistry();
   }
 
   async load() {
@@ -83,11 +85,19 @@ export class SpotifyYtCache {
   _scheduleWrite() {
     this.dirty = true;
     if (this.persistTimer) return;
-    this.persistTimer = setTimeout(() => {
+
+    // The debounce outlives a single interaction, so it is registered: flush()
+    // cancels the one pending write and dispose() guarantees none is left armed.
+    this.persistTimer = this.timers.setTimeout(() => {
       this.persistTimer = null;
       void this.persist();
     }, this.persistDebounceMs);
-    this.persistTimer.unref?.();
+  }
+
+  /** Releases any pending write timer without forcing a write. */
+  dispose() {
+    if (this.persistTimer) this.persistTimer = null;
+    return this.timers.dispose();
   }
 
   /**
@@ -142,7 +152,7 @@ async persist() {
 
   async flush() {
     if (this.persistTimer) {
-      clearTimeout(this.persistTimer);
+      this.timers.clear(this.persistTimer);
       this.persistTimer = null;
     }
     await this.persist();
