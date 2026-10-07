@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
 import { createLogger } from './utils/logger.js';
-import { deployCommands, deployCommandsForGuild } from './utils/deploy-commands.js';
+import { deployCommands, deployCommandsForGuild, isManagedChildProcess } from './utils/deploy-commands.js';
 import { RateLimiter } from './utils/rate-limiter.js';
 import { Telemetry } from './utils/telemetry.js';
 import { checkSpotifyCredentials } from './utils/spotify-check.js';
@@ -230,10 +230,19 @@ export async function main() {
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
 
+  // Global scope is owned by the manager (or a standalone process). Every
+  // managed child would otherwise issue an identical global PUT and race the
+  // others, so children skip it and deploy only their own guilds.
+  const isManagedChild = isManagedChildProcess();
+
+  if (isManagedChild) {
+    logger.info('Managed child detected; global command deployment is owned by the shard manager.');
+  }
+
   if (config.autoSyncGlobalCommands) {
     const mode = config.guildId ? `guild-only (${config.guildId})` : 'global';
     logger.info(`Syncing commands in ${mode} mode.`);
-    await deployCommands(config);
+    await deployCommands(config, { isManagedChild });
   }
 
   logger.info('Auralyn bot started successfully');

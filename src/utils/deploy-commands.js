@@ -49,14 +49,40 @@ export async function loadCommandPayloads() {
   return commands;
 }
 
-export function getCommandDeploymentTargets(config) {
+/**
+ * Resolves which command scopes this process owns.
+ *
+ * Ownership is decided by runtime role, never by GUILD_ID. A managed child is a
+ * single-shard process that must only ever deploy its own guilds; the manager
+ * (and any standalone process) owns global scope. discord.js injects
+ * SHARDING_MANAGER=true into every managed child's environment, which is what
+ * the entrypoint reads to compute `isManagedChild`.
+ */
+export function getCommandDeploymentTargets(config, { isManagedChild = false } = {}) {
+  if (isManagedChild) {
+    // A managed child never owns global scope. With GUILD_ID it deploys that
+    // one guild; without it, it deploys nothing here and relies on guildCreate.
+    return config.guildId
+      ? [{ scope: 'guild', clientId: config.clientId, guildId: config.guildId }]
+      : [];
+  }
+
   if (config.guildId) {
     return [{ scope: 'guild', clientId: config.clientId, guildId: config.guildId }];
   }
   return [{ scope: 'global', clientId: config.clientId }];
 }
 
-export async function deployCommands(config = loadConfig(), { force = false, timerRegistry } = {}) {
+/**
+ * True when this process is a shard spawned by the ShardingManager. Discord.js
+ * sets SHARDING_MANAGER in every child environment, so this is reliable rather
+ * than a heuristic based on SHARDS or SHARD_COUNT.
+ */
+export function isManagedChildProcess(env = process.env) {
+  return env.SHARDING_MANAGER === true || env.SHARDING_MANAGER === 'true';
+}
+
+export async function deployCommands(config = loadConfig(), { force = false, timerRegistry, isManagedChild = false } = {}) {
   const logger = createLogger({ level: config.logLevel, scope: 'deploy' });
   const commands = await loadCommandPayloads();
   const hash = hashCommands(commands);
@@ -71,7 +97,7 @@ export async function deployCommands(config = loadConfig(), { force = false, tim
     }),
   }).setToken(config.discordToken);
 
-  const targets = getCommandDeploymentTargets(config);
+  const targets = getCommandDeploymentTargets(config, { isManagedChild });
 
   for (const target of targets) {
     const key = targetKey(target);
