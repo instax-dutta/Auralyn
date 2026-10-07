@@ -4,16 +4,20 @@ node_modules/
 *.log
 .DS_Store
 
-# AI session logs (never commit)
+# AI session logs (never commit). Scoped to the repo root on purpose: the same
+# basename pattern used to match docs/superpowers/**, which silently excluded the
+# approved design spec and the roadmap plans that tracked documents cite.
 2026*.md
 
-# Stale docs (superseded by technical-foundation.md)
+# Superseded root drafts. Kept out of git but still cited by AGENTS.md and
+# CODEBASE_AUDIT.md; they are force-added so a fresh clone is not missing files
+# that tracked documentation points at.
 IMPLEMENTATION-PLAN.md
 BUILD-SUMMARY.md
 TECH-DOC.md
-IMPLEMENTATION_PLAN.md
-PHASE3.md
-PHASE*.md
+
+# The approved spec and its plans are tracked. Any future date-stamped draft
+# under docs/superpowers/ is a deliberate decision, not an accident of naming.
 # Local agent tooling state (per-machine, never shared)
 .claude/
 .mimocode/
