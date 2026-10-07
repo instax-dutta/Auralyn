@@ -22,6 +22,53 @@ require_env() {
     fi
 }
 
+# True only when the directory exists (or can be created) AND a real file can be
+# written into it. `[ -w ]` is not enough: it reports true on a read-only
+# filesystem, which is exactly the Pterodactyl case.
+dir_is_writable() {
+    candidate="$1"
+    if [ ! -d "$candidate" ]; then
+        mkdir -p "$candidate" 2>/dev/null || return 1
+    fi
+    probe="$candidate/.auralyn-write-probe.$$"
+    # touch rather than a redirection: under `set -e` a failed redirection aborts
+    # the shell before an `if !` can inspect it, whereas touch reports failure as
+    # an ordinary non-zero exit status.
+    touch "$probe" 2>/dev/null || return 1
+    rm -f "$probe" 2>/dev/null || true
+    return 0
+}
+
+# Resolve a data directory this process can actually write.
+#
+# The application defaults DATA_DIR to /app/data. Under Pterodactyl the root
+# filesystem is read-only, so that default can never be written and every boot
+# died with "EROFS: read-only file system, open '/app/data/sessions.json.lock'".
+# The only writable path there is the /home/container bind mount.
+#
+# An explicitly configured DATA_DIR is never overridden: if it is unwritable that
+# is a misconfiguration to report, not to paper over.
+if [ -z "${DATA_DIR:-}" ]; then
+    DATA_DIR_DEFAULT="${DATA_DIR_DEFAULT:-/app/data}"
+    DATA_DIR_FALLBACK="${DATA_DIR_FALLBACK:-/home/container/data}"
+
+    if dir_is_writable "$DATA_DIR_DEFAULT"; then
+        DATA_DIR="$DATA_DIR_DEFAULT"
+    elif dir_is_writable "$DATA_DIR_FALLBACK"; then
+        echo "WARNING: $DATA_DIR_DEFAULT is not writable; using $DATA_DIR_FALLBACK instead." >&2
+        DATA_DIR="$DATA_DIR_FALLBACK"
+    else
+        echo "ERROR: no writable data directory. $DATA_DIR_DEFAULT is unwritable and neither can $DATA_DIR_FALLBACK be created." >&2
+        exit 78
+    fi
+
+    export DATA_DIR
+    echo "Data directory: $DATA_DIR"
+elif ! dir_is_writable "$DATA_DIR"; then
+    echo "ERROR: DATA_DIR is set to $DATA_DIR, which this process cannot write." >&2
+    exit 78
+fi
+
 cleanup() {
     echo "Stopping Auralyn..."
     if [ -n "${BOT_PID:-}" ] && kill -0 "$BOT_PID" 2>/dev/null; then
