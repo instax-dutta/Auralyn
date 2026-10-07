@@ -7,9 +7,23 @@
 #   ./scripts/remote-test.sh test/foo.test.js   # one file
 set -e
 
-KEY="/Users/saiduttaabhishekdash/Downloads/LightsailDefaultKey-us-east-1 (2).pem"
-HOST="admin@23.23.142.61"
-REMOTE_DIR="~/dev/Auralyn"
+# Connection details are per-operator. Override any of these via the environment
+# rather than editing the script: the previous hardcoded key path leaked the
+# author's local username and directory layout into the repo, and made this
+# unusable from any other machine.
+: "${AURALYN_SSH_KEY:=$HOME/.ssh/auralyn-test.pem}"
+: "${AURALYN_SSH_HOST:=admin@23.23.142.61}"
+: "${AURALYN_REMOTE_DIR:=~/dev/Auralyn}"
+
+KEY="$AURALYN_SSH_KEY"
+HOST="$AURALYN_SSH_HOST"
+REMOTE_DIR="$AURALYN_REMOTE_DIR"
+
+if [ ! -f "$KEY" ]; then
+  echo "ERROR: SSH key not found at $KEY" >&2
+  echo "Set AURALYN_SSH_KEY=/path/to/key. This is a personal test host; there is no default that is correct for anyone else." >&2
+  exit 78
+fi
 
 rsync -az --delete -e "ssh -i '$KEY' -o StrictHostKeyChecking=no" \
   --exclude '.git/' \

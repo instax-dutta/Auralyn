@@ -10,6 +10,7 @@ Operational shell scripts and Node helper CLIs for building, running, and mainta
 - `stop.sh` — stop helper
 - `build-docker.sh` — Docker image build helper
 - `clear-guild-commands.js` — removes registered guild commands via Discord REST
+- `remote-test.sh` — rsyncs the working tree to a remote host and runs a command there. Connection details come from `AURALYN_SSH_KEY`, `AURALYN_SSH_HOST`, and `AURALYN_REMOTE_DIR`; never hardcode a key path, host, or home directory, since all three are per-operator
 
 ## Local Contracts
 
