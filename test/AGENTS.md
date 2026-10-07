@@ -56,6 +56,7 @@ Hermetic unit tests for Auralyn using Node's built-in test runner (`node --test`
   - `voice-empty-channel.test.js` — `voiceStateUpdate.js` disconnects (not stops) on an empty channel, across all five branches
   - `is-main-module.test.js` — the entrypoint guard resolves correctly, including paths containing `#` and `%` that break naive URL concatenation
   - `persist-failure-resilience.test.js` — a read-only data directory must not crash the player; failures are logged once per outage, not per event
+  - `lavalink-plugin-versions.test.js` — the Dockerfile pins a youtube-plugin that can resolve audio, and the download URLs interpolate the ARG
 
 ## TDD Gate
 

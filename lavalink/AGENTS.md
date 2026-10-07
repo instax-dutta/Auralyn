@@ -22,6 +22,9 @@ The pinned Lavalink v4 server that Auralyn ships and supervises inside the conta
 - Audio tuning changes must explain the latency-vs-quality tradeoff in comments.
 - Don't bump `Lavalink.jar` without validating against the Shoukaku API surface used by `src/music/player.js`.
 
+- The `Dockerfile` pins `YOUTUBE_PLUGIN_VERSION` and `LAVASRC_PLUGIN_VERSION`. Bump `YOUTUBE_PLUGIN_VERSION` whenever Lavalink announces a newer version on boot: an outdated plugin fails YouTube signature extraction ("must find sig function") and every track dies with `AllClientsFailedException`, which looks like a bot bug but is not.
+- The plugin URLs must interpolate the `ARG`, never a literal version, so the pin is the single source of truth.
+
 ## Verification
 
 - Existing checks: `scripts/start.sh` and `lavalink/start.sh` readiness probe (`GET /v4/info` with auth header); no automated test suite.

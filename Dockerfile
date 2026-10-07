@@ -6,7 +6,11 @@ RUN npm ci --omit=dev --ignore-scripts
 
 FROM node:20-alpine
 
-ARG YOUTUBE_PLUGIN_VERSION=1.18.1
+# 1.18.1 can no longer resolve audio: YouTube changed its player script and the
+# plugin fails signature extraction ("must find sig function"), so every track
+# errors with AllClientsFailedException. Bump this when Lavalink announces a
+# newer version; test/lavalink-plugin-versions.test.js guards the floor.
+ARG YOUTUBE_PLUGIN_VERSION=1.18.2
 ARG LAVASRC_PLUGIN_VERSION=4.8.2
 
 RUN apk add --no-cache \
