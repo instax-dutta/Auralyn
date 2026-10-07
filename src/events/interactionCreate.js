@@ -3,8 +3,15 @@ import { buildActionFeedback, buildNowPlayingV2, buildSimpleV2 } from '../utils/
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { AuralynColors } from '../utils/embeds.js';
 import { LOOP_OFF, LOOP_TRACK, LOOP_QUEUE } from '../music/queue.js';
+import { parseCustomId } from '../utils/interaction-ids.js';
+import { getCommandRestriction, requireDjOrAdmin } from '../utils/permissions.js';
 
 const LOOP_CYCLE = [LOOP_TRACK, LOOP_QUEUE, LOOP_OFF];
+
+// These families carry a user id instead of a guild id, so the guild-ownership
+// gate must not reject them.
+const USER_SCOPED_ACTIONS = new Set(['playlist-page', 'liked-page', 'liked-clear', 'voteskip']);
+const isUserScopedAction = action => USER_SCOPED_ACTIONS.has(action);
 const lastPatchTime = new Map();
 
 function patchV2(client, channelId, messageId, payload, guildId) {
@@ -33,10 +40,13 @@ export default {
   name: Events.InteractionCreate,
   async execute(interaction, client, shoukaku) {
     if (interaction.isButton()) {
-      if (!interaction.customId.startsWith('auralyn:')) return;
+      const parsed = parseCustomId(interaction.customId);
+      if (!parsed) return;
 
-      const [, action, guildId] = interaction.customId.split(':');
-      if (!guildId || guildId !== interaction.guildId) {
+      const { action, payload } = parsed;
+      const guildId = parsed.guildId;
+
+      if (!isUserScopedAction(action) && (!guildId || guildId !== interaction.guildId)) {
         await interaction.reply({
           ...buildActionFeedback('Controls', 'These controls belong to a different server session.', false),
           flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
@@ -87,12 +97,21 @@ export default {
         return;
       }
 
-      // Playlist pagination: auralyn:pl:page:<userId>:<playlistName>:<page>
-      if (action === 'pl' && interaction.customId.split(':')[2] === 'page') {
-        const parts = interaction.customId.split(':');
-        const userId = parts[3];
-        const playlistName = parts[4];
-        const page = parseInt(parts[5], 10);
+      // Vote skip buttons are collected by the command that created them, so
+      // they only need to reach their guild's active vote.
+      if (action === 'voteskip') {
+        const voterId = interaction.user.id;
+        try {
+          await client.onVoteSkip?.(interaction.guildId, payload.vote, voterId);
+        } catch (error) {
+          client.logger.error(`Error handling ${interaction.customId}`, error);
+        }
+        return;
+      }
+
+      // Playlist pagination
+      if (action === 'playlist-page') {
+        const { userId, playlistName, page } = payload;
 
         if (userId !== interaction.user.id) {
           await interaction.reply({
@@ -114,11 +133,9 @@ export default {
         return;
       }
 
-      // Liked songs pagination: auralyn:liked:page:<userId>:<page>
-      if (action === 'liked' && interaction.customId.split(':')[2] === 'page') {
-        const parts = interaction.customId.split(':');
-        const userId = parts[3];
-        const page = parseInt(parts[4], 10);
+      // Liked songs pagination
+      if (action === 'liked-page') {
+        const { userId, page } = payload;
 
         if (userId !== interaction.user.id) {
           await interaction.reply({
@@ -138,11 +155,9 @@ export default {
         return;
       }
 
-      // Clear liked: auralyn:liked:clear:confirm|cancel:<userId>
-      if (action === 'liked' && interaction.customId.split(':')[2] === 'clear') {
-        const parts = interaction.customId.split(':');
-        const confirmOrCancel = parts[3];
-        const userId = parts[4];
+      // Clear liked: confirm or cancel
+      if (action === 'liked-clear') {
+        const { decision: confirmOrCancel, userId } = payload;
 
         if (userId !== interaction.user.id) {
           await interaction.reply({
@@ -230,6 +245,36 @@ export default {
     if (!command) {
       client.logger.warn(`No command matching ${interaction.commandName}`);
       return;
+    }
+
+    // Restrictions are enforced once here so every command obeys /restrict,
+    // not just the handful that used to duplicate this check inline.
+    if (interaction.guildId) {
+      const restriction = await getCommandRestriction(
+        client.musicPlayer.settingsStore,
+        interaction.guildId,
+        interaction.commandName,
+      );
+
+      if (restriction?.channelId && interaction.channelId !== restriction.channelId) {
+        await interaction.reply({
+          ...buildActionFeedback('Wrong Channel', `\`/${interaction.commandName}\` is restricted to <#${restriction.channelId}>.`, false),
+          flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (restriction?.djOnly) {
+        const settings = await client.musicPlayer.settingsStore.get(interaction.guildId);
+        const djCheck = requireDjOrAdmin(interaction, settings);
+        if (!djCheck.allowed) {
+          await interaction.reply({
+            ...djCheck.reply,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+          });
+          return;
+        }
+      }
     }
 
     try {

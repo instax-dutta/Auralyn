@@ -2,12 +2,14 @@ import { Client, GatewayIntentBits, Collection, Events } from 'discord.js';
 import { Connectors, Shoukaku } from 'shoukaku';
 import fs from 'fs';
 import path from 'path';
+import { dataPath } from './utils/data-dir.js';
 import dotenv from 'dotenv';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { isMainModule } from './utils/is-main-module.js';
 import { loadConfig } from './config.js';
 import { MusicPlayer } from './music/player.js';
 import { createLogger } from './utils/logger.js';
-import { deployCommands, deployCommandsForGuild } from './utils/deploy-commands.js';
+import { deployCommands, deployCommandsForGuild, isManagedChildProcess } from './utils/deploy-commands.js';
 import { RateLimiter } from './utils/rate-limiter.js';
 import { Telemetry } from './utils/telemetry.js';
 import { checkSpotifyCredentials } from './utils/spotify-check.js';
@@ -93,8 +95,23 @@ const shoukaku = new Shoukaku(
 );
 
 client.telemetry = new Telemetry(logger.child('telemetry'));
-client.settingsStore = new GuildSettingsStore();
-client.sessionStore = new JsonSessionStore({ filePath: '/app/data/sessions.json' });
+client.settingsStore = new GuildSettingsStore({ logger });
+client.sessionStore = new JsonSessionStore({ filePath: dataPath('sessions.json') });
+
+// Lift any pre-per-guild data forward before playback reads it. Both are
+// idempotent and never delete their source.
+try {
+  const settingsMigration = await client.settingsStore.migrateLegacySettings();
+  if (settingsMigration.migrated > 0) {
+    logger.info(`Migrated ${settingsMigration.migrated} guild(s) to per-guild settings files`);
+  }
+  const sessionMigration = await client.sessionStore.migrateLegacySessions();
+  if (sessionMigration.migrated > 0) {
+    logger.info(`Migrated ${sessionMigration.migrated} session(s) to the versioned envelope`);
+  }
+} catch (error) {
+  logger.error('Failed to migrate legacy persistence files', error);
+}
 client.playlistStore = new PlaylistStore();
 client.likedStore = new LikedStore();
 client.musicPlayer = new MusicPlayer(shoukaku, logger.child('player'), { telemetry: client.telemetry, settingsStore: client.settingsStore, sessionStore: client.sessionStore });
@@ -149,9 +166,19 @@ const loadEvents = async () => {
 };
 
 const setupShoukakuEvents = () => {
-  shoukaku.on('ready', (name, resumed) => {
+  let reattached = false;
+  shoukaku.on('ready', async (name, resumed) => {
     if (resumed) client.telemetry?.trackReconnect();
     logger.info(`Lavalink node ${name} ready${resumed ? ' (resumed)' : ''}`);
+
+    // Sessions restored at client-ready can only resume now that Lavalink is
+    // connected. Only the first node to come up reattaches.
+    if (client.musicPlayer?.reattachRestored && !reattached) {
+      reattached = true;
+      await client.musicPlayer.reattachRestored().catch(error => {
+        logger.error('Failed to reattach restored sessions', error);
+      });
+    }
   });
   shoukaku.on('error', (name, error) => {
     logger.error(`Lavalink node ${name} error`, error);
@@ -164,7 +191,20 @@ const setupShoukakuEvents = () => {
   });
 };
 
-const shutdown = async (signal) => {
+let shutdownInFlight = null;
+
+const shutdown = (signal) => {
+  // Single flight. A signal and a typed manager message can arrive together,
+  // and `process.once` does not dedupe across the two channels. Running the
+  // teardown twice would flush the cache and destroy the client twice, and the
+  // first process.exit(0) would truncate the second's writes.
+  if (shutdownInFlight) return shutdownInFlight;
+
+  shutdownInFlight = runShutdown(signal);
+  return shutdownInFlight;
+};
+
+const runShutdown = async (signal) => {
   logger.warn(`Received ${signal}. Shutting down Auralyn (shard ${SHARD_TAG})...`);
 
   try {
@@ -185,6 +225,10 @@ const shutdown = async (signal) => {
       logger.warn(`Failed to flush Spotify→YT cache: ${error.message}`);
     });
 
+    // Release timers started by handlers (e.g. the ready presence interval)
+    // before the client is destroyed.
+    client.timerRegistry?.dispose();
+
     logger.info('Destroying Discord client...');
     await client.destroy();
     logger.info('Shutdown complete');
@@ -204,10 +248,19 @@ export async function main() {
   process.once('SIGTERM', shutdown);
   await client.login(config.discordToken);
 
+  // Global scope is owned by the manager (or a standalone process). Every
+  // managed child would otherwise issue an identical global PUT and race the
+  // others, so children skip it and deploy only their own guilds.
+  const isManagedChild = isManagedChildProcess();
+
+  if (isManagedChild) {
+    logger.info('Managed child detected; global command deployment is owned by the shard manager.');
+  }
+
   if (config.autoSyncGlobalCommands) {
     const mode = config.guildId ? `guild-only (${config.guildId})` : 'global';
     logger.info(`Syncing commands in ${mode} mode.`);
-    await deployCommands(config);
+    await deployCommands(config, { isManagedChild });
   }
 
   logger.info('Auralyn bot started successfully');
@@ -226,9 +279,23 @@ client.on('guildCreate', async (guild) => {
   }
 });
 
-const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+// The ShardingManager asks a child to stop with a typed IPC message instead of
+// a signal, so a child that has finished booting can flush and exit cleanly.
+// This is registered only when the process really is a forked child; importing
+// this module in a normal process must not attach an IPC listener.
+if (typeof process.send === 'function') {
+  process.on('message', message => {
+    if (!message || message.op !== 'graceful_shutdown') return;
+    shutdown('graceful_shutdown').catch(error => {
+      logger.error('Error during graceful shutdown message', error);
+      process.exit(1);
+    });
+  });
+}
 
-if (isMainModule) {
+const isMain = isMainModule(import.meta.url, process.argv[1]);
+
+if (isMain) {
   main().catch(error => {
     logger.error('Auralyn failed to start', error);
     process.exit(1);
@@ -236,3 +303,7 @@ if (isMainModule) {
 }
 
 export { client, shoukaku };
+
+/** Exported for tests: shutdown is idempotent, so the returned promise
+ * identity proves concurrent triggers collapse into one teardown. */
+export { shutdown };

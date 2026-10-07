@@ -1,5 +1,6 @@
 import { LoadType } from 'shoukaku';
 import { createSilentLogger } from '../utils/logger.js';
+import { TimerRegistry } from '../utils/timer-registry.js';
 import { defaultGuildSettings } from '../utils/guild-settings.js';
 import { QueueManager, LOOP_TRACK } from './queue.js';
 import { FILTER_PRESETS, DEFAULT_FILTER, PRESET_LAYER } from '../utils/audio-filters.js';
@@ -28,6 +29,11 @@ function isFilterPayloadMeaningful(filters) {
   return false;
 }
 
+function resolveChannel(client, channelId) {
+  if (!client || !channelId) return null;
+  return client.channels?.cache?.get(channelId) ?? null;
+}
+
 export class MusicPlayer {
   constructor(shoukaku, logger = createSilentLogger(), {
     settingsStore = null,
@@ -43,6 +49,11 @@ export class MusicPlayer {
     this.telemetry = telemetry;
     this.queueManager = new QueueManager(logger.child('queue'));
     this.nowPlayingMessages = new Map();
+    this.persistStamps = new Map();
+    this.restorableGuilds = new Set();
+    // Every timer this player starts is registered so shutdown can release the
+    // ones no guild ever cleared.
+    this.timers = new TimerRegistry();
   }
 
   startNowPlayingRefresh(guildId, message) {
@@ -63,8 +74,8 @@ export class MusicPlayer {
       if (state.isPaused) {
         const entry = this.nowPlayingMessages.get(guildId);
         if (entry) {
-          clearTimeout(entry.timer);
-          entry.timer = setTimeout(tick, currentInterval);
+          this.timers.clear(entry.timer);
+          entry.timer = this.timers.setTimeout(tick, currentInterval);
         }
         return;
       }
@@ -84,8 +95,8 @@ export class MusicPlayer {
       if (payloadKey === lastPayloadKey) {
         const entry = this.nowPlayingMessages.get(guildId);
         if (entry) {
-          clearTimeout(entry.timer);
-          entry.timer = setTimeout(tick, currentInterval);
+          this.timers.clear(entry.timer);
+          entry.timer = this.timers.setTimeout(tick, currentInterval);
         }
         return;
       }
@@ -109,17 +120,17 @@ export class MusicPlayer {
       }
       const entry = this.nowPlayingMessages.get(guildId);
       if (entry) {
-        clearTimeout(entry.timer);
-        entry.timer = setTimeout(tick, currentInterval);
+        this.timers.clear(entry.timer);
+        entry.timer = this.timers.setTimeout(tick, currentInterval);
       }
     };
-    this.nowPlayingMessages.set(guildId, { message, timer: setTimeout(tick, currentInterval) });
+    this.nowPlayingMessages.set(guildId, { message, timer: this.timers.setTimeout(tick, currentInterval) });
   }
 
   stopNowPlayingRefresh(guildId) {
     const entry = this.nowPlayingMessages.get(guildId);
     if (entry) {
-      clearTimeout(entry.timer);
+      this.timers.clear(entry.timer);
       this.nowPlayingMessages.delete(guildId);
     }
   }
@@ -411,14 +422,67 @@ export class MusicPlayer {
     await this.shoukaku.leaveVoiceChannel(guildId);
   }
 
-  enqueueFront(guildId, track) {
-    this.queueManager.enqueueFront(guildId, track);
+  async enqueueFront({ guildId, track, textChannel, voiceChannel }) {
+    const state = this.queueManager.getState(guildId);
+    state.textChannel = textChannel;
+    state.voiceChannel = voiceChannel;
+
+    const nextTrack = {
+      ...track,
+      requestedByUserId: track.requestedByUserId ?? null,
+      requestedByName: track.requestedByName ?? null,
+    };
+
+    this.queueManager.enqueueFront(guildId, nextTrack);
+
+    if (!state.isPlaying) {
+      this.logger.debug(`Guild ${guildId} is idle, starting playback for the front-inserted track`);
+      await this.playNext(guildId, { skipNotification: true });
+    }
+
+    void this.persistGuildState(guildId);
+
+    return state;
+  }
+
+  /**
+   * Tears playback down and rebuilds it from a snapshot while preserving
+   * order: the snapshot's queue stays in its original sequence and the
+   * snapshot's current track becomes the current track again. Unlike
+   * replaying enqueueFront, this never reverses the queue.
+   */
+  async restoreSession({ guildId, currentTrack = null, queue = [], textChannel = null, voiceChannel = null }) {
+    const state = this.queueManager.getState(guildId);
+    const restoreTextChannel = textChannel ?? state.textChannel;
+    const restoreVoiceChannel = voiceChannel ?? state.voiceChannel;
+
+    await this.stop(guildId);
+
+    const fresh = this.queueManager.getState(guildId);
+    fresh.textChannel = restoreTextChannel;
+    fresh.voiceChannel = restoreVoiceChannel;
+    fresh.queue = [...queue];
+
+    if (currentTrack) {
+      fresh.queue.unshift(currentTrack);
+    }
+
+    if (fresh.queue.length === 0) {
+      return { restored: 0, resumed: false };
+    }
+
+    await this.playNext(guildId, { skipNotification: true });
+
+    return {
+      restored: fresh.queue.length,
+      resumed: fresh.isPlaying,
+    };
   }
 
   clearSleepTimer(guildId) {
     const state = this.queueManager.getState(guildId);
     if (state.sleepTimer) {
-      clearTimeout(state.sleepTimer);
+      this.timers.clear(state.sleepTimer);
       state.sleepTimer = null;
     }
   }
@@ -426,14 +490,54 @@ export class MusicPlayer {
   setSleepTimer(guildId, ms) {
     this.clearSleepTimer(guildId);
     const state = this.queueManager.getState(guildId);
-    state.sleepTimer = setTimeout(() => {
+    state.sleepTimer = this.timers.setTimeout(() => {
       this.stop(guildId).catch(() => {});
     }, ms);
   }
 
+  async clearVoiceStatus(guildId, state) {
+    try {
+      const settings = await this.getGuildSettings(guildId);
+      if (!settings.vcStatusEnabled) return;
+      const voiceChannelId = state?.voiceChannel?.id;
+      const restClient = state?.voiceChannel?.client?.rest;
+      if (voiceChannelId && restClient) {
+        await restClient.put(`/channels/${voiceChannelId}/voice-status`, { body: { status: '' } });
+      }
+    } catch { /* ignore — 403 on free tier or no permission */ }
+  }
+
+  /**
+   * Recoverable disconnect: leaves the voice channel but keeps the queue and
+   * persists it, so a restart can restore it. This is what an empty voice
+   * channel and `/disconnect` use. It never records a tombstone.
+   */
+  async disconnect(guildId) {
+    this.stopNowPlayingRefresh(guildId);
+    this.clearSleepTimer(guildId);
+
+    const state = this.queueManager.getState(guildId);
+    await this.clearVoiceStatus(guildId, state);
+
+    // Capture the snapshot before tearing down transport, so the queue survives.
+    await this.persistGuildState(guildId);
+
+    this.cleanupGuild(guildId);
+    await this.shoukaku.leaveVoiceChannel(guildId);
+    this.queueManager.cleanup(guildId);
+  }
+
+  /**
+   * Destructive stop: clears the queue and records a tombstone so a restart does
+   * not restore it. This is what `/stop` uses.
+   *
+   * It must not route through `disconnect()`, which is recoverable and would
+   * re-persist the very session being cleared.
+   */
   async stop(guildId) {
     this.stopNowPlayingRefresh(guildId);
     this.clearSleepTimer(guildId);
+
     const state = this.queueManager.getState(guildId);
     state.queue = [];
     state.currentTrack = null;
@@ -449,31 +553,34 @@ export class MusicPlayer {
     }
 
     await this.clearVoiceStatus(guildId, state);
-    await this.disconnect(guildId);
-  }
 
-  async clearVoiceStatus(guildId, state) {
-    try {
-      const settings = await this.getGuildSettings(guildId);
-      if (!settings.vcStatusEnabled) return;
-      const voiceChannelId = state?.voiceChannel?.id;
-      const restClient = state?.voiceChannel?.client?.rest;
-      if (voiceChannelId && restClient) {
-        await restClient.put(`/channels/${voiceChannelId}/voice-status`, { body: { status: '' } });
-      }
-    } catch { /* ignore — 403 on free tier or no permission */ }
-  }
-
-  async disconnect(guildId) {
-    this.stopNowPlayingRefresh(guildId);
-    const state = this.queueManager.getState(guildId);
-    await this.clearVoiceStatus(guildId, state);
     this.cleanupGuild(guildId);
     await this.shoukaku.leaveVoiceChannel(guildId);
     this.queueManager.cleanup(guildId);
+
     if (this.sessionStore?.delete) {
       await this.sessionStore.delete(guildId);
     }
+  }
+
+  /**
+   * Recoverable shutdown: quiesces admission, flushes every live guild, and
+   * leaves the voice channel. Sessions stay restorable, so a redeploy resumes
+   * where it left off instead of starting empty.
+   */
+  async shutdown() {
+    this.shuttingDown = true;
+
+    const guildIds = [...this.queueManager.players.keys()];
+
+    await Promise.all(guildIds.map(guildId => this.disconnect(guildId).catch(error => {
+      this.logger.error(`Failed to disconnect guild ${guildId} during shutdown`, error);
+    })));
+
+    this.nowPlayingMessages.clear();
+    const released = this.timers.dispose();
+
+    return { guilds: guildIds.length, timersReleased: released };
   }
 
   cleanupGuild(guildId) {
@@ -773,19 +880,122 @@ export class MusicPlayer {
     return this.settingsStore.get(guildId);
   }
 
+  /**
+   * Captures a session snapshot.
+   *
+   * `updatedAt` is a monotonic per-guild stamp, not a wall clock read. Two
+   * persists that race therefore still order correctly, and the store's
+   * staleness guard can never reject this guild's own newer write.
+   */
+  /**
+   * Hydrates persisted sessions into logical player state without touching
+   * voice. This runs when the client is ready, before Lavalink is guaranteed to
+   * be connected, so a guild that was playing before a restart is marked
+   * restorable rather than connected.
+   *
+   * Guilds whose last outcome was a destructive stop are skipped, because a
+   * tombstone is exactly the record that they should not come back.
+   */
+  async restoreSessions({ client } = {}) {
+    if (!this.sessionStore?.getAll) return [];
+
+    const all = await this.sessionStore.getAll();
+    const restored = [];
+
+    for (const [guildId, snapshot] of Object.entries(all)) {
+      if (!snapshot) continue;
+
+      if (await this.sessionStore.wasStopped?.(guildId)) {
+        this.logger.debug(`Skipping restore for stopped guild ${guildId}`);
+        continue;
+      }
+
+      const state = this.queueManager.getState(guildId);
+      state.queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
+      state.currentTrack = snapshot.currentTrack ?? null;
+      state.isPlaying = false;
+      state.isPaused = false;
+      state.restored = true;
+
+      if (typeof snapshot.volume === 'number') state.volume = snapshot.volume;
+      if (typeof snapshot.loopMode === 'number') state.loopMode = snapshot.loopMode;
+
+      // Channels are stored as ids, so resolve them against the live caches.
+      // A channel that no longer exists must not cost us the restored queue.
+      state.textChannel = resolveChannel(client, snapshot.textChannelId);
+      state.voiceChannel = resolveChannel(client, snapshot.voiceChannelId);
+
+      restored.push(guildId);
+    }
+
+    this.restorableGuilds = new Set(restored);
+
+    if (restored.length > 0) {
+      this.logger.info(`Restored ${restored.length} session(s) from disk`);
+    }
+
+    return restored;
+  }
+
+  /**
+   * Reconnects every restorable guild that has something to play. Called once
+   * Lavalink reports ready, since playback cannot resume before then.
+   */
+  async reattachRestored() {
+    const attached = [];
+
+    for (const guildId of this.restorableGuilds ?? []) {
+      const state = this.queueManager.getState(guildId);
+      if (!state.currentTrack || !state.voiceChannel) continue;
+
+      try {
+        await this.join(guildId, state.voiceChannel, state.textChannel);
+
+        // Resume the track that was playing rather than advancing to the next
+        // one: `playNext` shifts from the queue, which would skip the restored
+        // current track entirely.
+        const player = await this.getOrCreateLavalinkPlayer(guildId);
+        await player.playTrack({ track: { encoded: state.currentTrack.encoded } });
+        state.isPlaying = true;
+        this.telemetry?.trackTrackPlayed();
+
+        attached.push(guildId);
+      } catch (error) {
+        this.logger.error(`Failed to reattach guild ${guildId}`, error);
+      }
+    }
+
+    if (attached.length > 0) {
+      this.logger.info(`Reattached ${attached.length} restored session(s)`);
+    }
+
+    return attached;
+  }
+
   async persistGuildState(guildId) {
     if (!this.sessionStore?.save) return;
 
     const state = this.queueManager.getState(guildId);
-    await this.sessionStore.save(guildId, {
-      guildId,
-      queue: state.queue,
-      currentTrack: state.currentTrack,
-      volume: state.volume,
-      loopMode: state.loopMode,
-      textChannelId: state.textChannel?.id ?? null,
-      voiceChannelId: state.voiceChannel?.id ?? null,
-      updatedAt: new Date().toISOString(),
-    });
+    const last = this.persistStamps.get(guildId) ?? 0;
+    const now = Math.max(Date.now(), last + 1);
+    this.persistStamps.set(guildId, now);
+
+    try {
+      await this.sessionStore.save(guildId, {
+        guildId,
+        queue: state.queue,
+        currentTrack: state.currentTrack,
+        volume: state.volume,
+        loopMode: state.loopMode,
+        textChannelId: state.textChannel?.id ?? null,
+        voiceChannelId: state.voiceChannel?.id ?? null,
+        updatedAt: new Date(now).toISOString(),
+      });
+    } catch (error) {
+      // A stale rejection means another writer already holds a newer view; it
+      // must not surface as an unhandled rejection from a fire-and-forget call.
+      if (error?.name !== 'StaleRevisionError') throw error;
+      this.logger.debug(`Skipped a stale session write for guild ${guildId}`);
+    }
   }
 }

@@ -1,6 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdir, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { dataPath } from './data-dir.js';
+import { writeJsonAtomic, readJsonWithQuarantine } from './atomic-json.js';
+import { withFileLock } from './storage-lock.js';
 
 export const DEFAULT_SOURCE_PRIORITY = ['direct', 'youtube'];
 export const VALID_SOURCES = new Set(['direct', 'youtube', 'soundcloud']);
@@ -35,13 +38,13 @@ function sanitizeNumber(value, fallback, { min, max }) {
   return Math.min(max, Math.max(min, Math.round(parsed)));
 }
 
-function sanitizeGuildSettings(input = {}) {
+export function sanitizeGuildSettings(input = {}) {
   return {
     defaultVolume: sanitizeNumber(input.defaultVolume, defaultGuildSettings.defaultVolume, { min: 1, max: 100 }),
     autoplay: input.autoplay === true,
     inactivityTimeoutMs: sanitizeNumber(input.inactivityTimeoutMs, defaultGuildSettings.inactivityTimeoutMs, { min: 30000, max: 900000 }),
     djRoleIds: Array.isArray(input.djRoleIds)
-      ? [...new Set(input.djRoleIds.filter((value) => typeof value === 'string' && value.trim() !== ''))]
+      ? [...new Set(input.djRoleIds.filter(value => typeof value === 'string' && value.trim() !== ''))]
       : [],
     sourcePriority: Array.isArray(input.sourcePriority) && input.sourcePriority.length > 0
       ? input.sourcePriority.filter(s => VALID_SOURCES.has(s))
@@ -75,81 +78,156 @@ function sanitizeGuildSettings(input = {}) {
   };
 }
 
-const DEFAULT_FILE_PATH = '/app/data/guild-settings.json';
+const LEGACY_FILE_NAME = 'guild-settings.json';
 
+export function guildSettingsPath(guildId, { dataRoot } = {}) {
+  const root = dataRoot ?? dataPath();
+  return path.join(root, 'guilds', String(guildId), 'settings.json');
+}
+
+/**
+ * Per-guild settings store.
+ *
+ * Production layout is one file per guild under `guilds/<id>/settings.json`, so
+ * a corrupt or contended file can only affect its own guild. Passing
+ * `filePath` selects the legacy single-file map layout, which is kept for tests
+ * and for reading pre-migration data.
+ */
 export class GuildSettingsStore {
-  constructor({ filePath } = {}) {
-    this.filePath = filePath || DEFAULT_FILE_PATH;
+  constructor({ dataRoot, filePath, logger } = {}) {
+    this.dataRoot = dataRoot ?? null;
+    this.filePath = filePath ?? null;
+    this.logger = logger ?? null;
     this.cache = null;
-    this._loadSync();
   }
 
-  _loadSync() {
-    if (!existsSync(this.filePath)) {
-      this.cache = {};
-      return;
-    }
-
-    try {
-      const raw = readFileSync(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      this.cache = Object.fromEntries(
-        Object.entries(parsed).map(([guildId, settings]) => [guildId, sanitizeGuildSettings(settings)]),
-      );
-    } catch (error) {
-      this.cache = {};
-    }
+  get legacyMode() {
+    return this.filePath !== null;
   }
 
-  async ensureLoaded() {
-    if (this.cache) return this.cache;
-
-    try {
-      const raw = await readFile(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      this.cache = Object.fromEntries(
-        Object.entries(parsed).map(([guildId, settings]) => [guildId, sanitizeGuildSettings(settings)]),
-      );
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      this.cache = {};
-    }
-
-    return this.cache;
+  pathFor(guildId) {
+    return this.legacyMode ? this.filePath : guildSettingsPath(guildId, { dataRoot: this.dataRoot });
   }
 
-  async persist() {
-    try {
-      await mkdir(path.dirname(this.filePath), { recursive: true });
-      await writeFile(this.filePath, JSON.stringify(this.cache, null, 2));
-    } catch (error) {
-      console.warn(`[guild-settings] Failed to persist: ${error.message}`);
+  async readGuild(guildId) {
+    const file = this.pathFor(guildId);
+    const { value, quarantinedTo } = await readJsonWithQuarantine(file);
+
+    if (quarantinedTo) {
+      this.logger?.warn?.('guild_settings_quarantined', { file, quarantinedTo });
     }
+
+    if (!value || typeof value !== 'object') return null;
+    // Legacy single-file layout stores a map of guilds in one file.
+    if (this.legacyMode && !('defaultVolume' in value) && guildId in value) {
+      return value[guildId];
+    }
+    return value;
+  }
+
+  async writeGuild(guildId, settings) {
+    const file = this.pathFor(guildId);
+    // The lock file lives beside the target, so the directory must exist first.
+    await mkdir(path.dirname(file), { recursive: true });
+    await withFileLock(file, async () => {
+      await writeJsonAtomic(file, settings);
+    });
   }
 
   async get(guildId) {
-    const cache = await this.ensureLoaded();
-    return {
-      ...defaultGuildSettings,
-      ...(cache[guildId] ?? {}),
-    };
+    const stored = await this.readGuild(guildId);
+    return { ...defaultGuildSettings, ...(stored ?? {}) };
   }
 
   async update(guildId, partialSettings) {
-    const cache = await this.ensureLoaded();
-    const nextSettings = sanitizeGuildSettings({
-      ...(cache[guildId] ?? defaultGuildSettings),
-      ...partialSettings,
-    });
-    cache[guildId] = nextSettings;
-    await this.persist();
+    const current = await this.get(guildId);
+    const nextSettings = sanitizeGuildSettings({ ...current, ...partialSettings });
+
+    if (this.legacyMode) {
+      await mkdir(path.dirname(this.filePath), { recursive: true });
+      await withFileLock(this.filePath, async () => {
+        const { value } = await readJsonWithQuarantine(this.filePath);
+        const cache = value && typeof value === 'object' ? value : {};
+        cache[guildId] = nextSettings;
+        this.cache = cache;
+        await writeJsonAtomic(this.filePath, cache);
+      });
+    } else {
+      await this.writeGuild(guildId, nextSettings);
+    }
+
     return nextSettings;
   }
 
+  /**
+   * Lifts a pre-per-guild `guild-settings.json` map into one file per guild.
+   *
+   * A valid canonical file always wins over the legacy source, so re-running
+   * this can never roll a guild back to older values. A corrupt canonical file
+   * is quarantined and the legacy source is used instead, so recoverable data is
+   * not discarded. The legacy file is never deleted.
+   */
+  async migrateLegacySettings() {
+    if (this.legacyMode) return { migrated: 0, skipped: 0 };
+
+    const root = this.dataRoot ?? dataPath();
+    const legacyPath = path.join(root, LEGACY_FILE_NAME);
+
+    const { value } = await readJsonWithQuarantine(legacyPath);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return { migrated: 0, skipped: 0 };
+
+    let migrated = 0;
+    let skipped = 0;
+
+    for (const [guildId, settings] of Object.entries(value)) {
+      if (!settings || typeof settings !== 'object') continue;
+
+      const target = guildSettingsPath(guildId, { dataRoot: this.dataRoot });
+
+      if (existsSync(target)) {
+        // Never let migration overwrite a value that already exists: it may be
+        // newer than the legacy source. A canonical file that will not parse is
+        // quarantined first so the legacy value is not lost with it.
+        const existing = await readJsonWithQuarantine(target);
+        if (!existing.quarantinedTo) {
+          skipped += 1;
+          continue;
+        }
+
+        this.logger?.warn?.('guild_settings_quarantined', {
+          file: target,
+          quarantinedTo: existing.quarantinedTo,
+        });
+      }
+
+      await this.writeGuild(guildId, sanitizeGuildSettings(settings));
+      migrated += 1;
+    }
+
+    return { migrated, skipped };
+  }
+
   async getAll() {
-    const cache = await this.ensureLoaded();
-    return Object.fromEntries(
-      Object.entries(cache).map(([guildId, settings]) => [guildId, { ...defaultGuildSettings, ...settings }]),
-    );
+    if (this.legacyMode) {
+      const { value } = await readJsonWithQuarantine(this.filePath);
+      const cache = value && typeof value === 'object' ? value : {};
+      return Object.fromEntries(
+        Object.entries(cache).map(([guildId, settings]) => [guildId, { ...defaultGuildSettings, ...settings }]),
+      );
+    }
+
+    const root = this.dataRoot ?? dataPath();
+    let entries;
+    try {
+      entries = await readdir(path.join(root, 'guilds'));
+    } catch {
+      return {};
+    }
+
+    const result = {};
+    for (const guildId of entries) {
+      result[guildId] = await this.get(guildId);
+    }
+    return result;
   }
 }
