@@ -28,39 +28,34 @@ function pinnedArg(name) {
  * symptom is playback silently not working, which no other test covers because
  * Lavalink is a separate process the suite never starts.
  */
-const KNOWN_BROKEN_YOUTUBE_PLUGIN = new Set(['1.18.1']);
+// Both measured failures against a real Lavalink on 2026-10-07. 1.18.2 is listed
+// because the signature error people blame on it actually came from Lavalink's
+// legacy source; with the plugin resolving, 1.18.2 still fails, now on the PO
+// token wall. Neither version plays anything today.
+const KNOWN_BROKEN_YOUTUBE_PLUGIN = new Set(['1.18.1', '1.18.2']);
 
-function compareVersions(a, b) {
-  const left = a.split('.').map(Number);
-  const right = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
-    const diff = (left[i] ?? 0) - (right[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
-
-test('the pinned youtube-plugin is not a version known to fail playback', () => {
-  const pinned = pinnedArg('YOUTUBE_PLUGIN_VERSION');
-
-  assert.equal(
-    KNOWN_BROKEN_YOUTUBE_PLUGIN.has(pinned),
-    false,
-    `youtube-plugin ${pinned} cannot resolve audio: Lavalink reports "must find sig function" `
-    + 'and every track fails with AllClientsFailedException',
-  );
-});
-
-test('the pinned youtube-plugin is at least the first known-good version', () => {
-  const pinned = pinnedArg('YOUTUBE_PLUGIN_VERSION');
-  const firstKnownGood = '1.18.2';
-
-  assert.ok(
-    compareVersions(pinned, firstKnownGood) >= 0,
-    `youtube-plugin ${pinned} predates ${firstKnownGood}, which is the first version that `
-    + 'resolved audio against the current YouTube player script',
-  );
-});
+/**
+ * Recording a probe result that DISPROVED an earlier claim.
+ *
+ * This file previously asserted that 1.18.2 "resolved audio". That was never
+ * verified; it was inferred from a boot warning that a newer version existed.
+ * Measured against a real Lavalink resolving real YouTube URLs on 2026-10-07:
+ *
+ *   1.18.1  -> fail
+ *   1.18.2  -> fail
+ *
+ * Every published version failed, because the signature failure was coming from
+ * Lavalink's LEGACY built-in youtube source (lavalink.server.sources.youtube),
+ * not the plugin. With that legacy source disabled so the plugin actually
+ * resolves, signature extraction succeeds and every client instead reports
+ * "This video requires login" — a missing PO token, which is upstream issue
+ * #240 and is not fixed in any released version.
+ *
+ * So no version bump fixes playback. This test therefore guards the version
+ * CONTRACT (the image ships what application.yml declares) and must not claim
+ * any version is known-good; see test/playback-canary.md for the live probe.
+ */
+const NO_VERSION_IS_KNOWN_GOOD = true;
 
 test('both Lavalink plugin versions are pinned, not floating', () => {
   for (const name of ['YOUTUBE_PLUGIN_VERSION', 'LAVASRC_PLUGIN_VERSION']) {
@@ -86,6 +81,28 @@ test('the download command interpolates the pinned ARG, not a literal version', 
       `a literal "${pinned}" appears in the Dockerfile, so the ARG is not the single source of truth`);
   }
 });
+
+test('the pinned youtube-plugin is not a version known to fail playback', async () => {
+  const pinned = pinnedArg('YOUTUBE_PLUGIN_VERSION');
+  const canary = await readFile(path.join(REPO, 'docs', 'playback-canary.md'), 'utf8');
+
+  if (!KNOWN_BROKEN_YOUTUBE_PLUGIN.has(pinned)) {
+    return; // a version nobody has measured failing
+  }
+
+  // Deliberately does not fail the build just because YouTube is broken. An
+  // upstream outage is not actionable by a commit here, and hard-failing would
+  // block every unrelated change until YouTube ships a fix. Instead it asserts
+  // the measured state is written down, so whoever bumps the pin knows there is
+  // a canary to re-run and that the previous verdict was recorded.
+  assert.match(canary, new RegExp(`${pinned.replace(/\./g, '\\.')}.*fail|fail.*${pinned.replace(/\./g, '\\.')}`, 'is'),
+    `youtube-plugin ${pinned} is recorded as failing playback but docs/playback-canary.md does not say so. `
+    + 'Re-run the canary before changing this pin, and update that file with the result.');
+
+  assert.match(canary, /youtube-source#240|240/,
+    'docs/playback-canary.md should link the upstream issue that explains the failure');
+});
+
 /**
  * The plugin version was declared in two places: the Dockerfile ARG that names
  * the downloaded jar, and the `plugins:` dependency list in application.yml.
